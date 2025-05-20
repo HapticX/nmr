@@ -1,8 +1,14 @@
 import
   ./help,
-  ./upgrade
+  ./upgrade,
+  ./search,
+  ./info,
+  ./deps_graph
 
 
 export
   help,
-  upgrade
+  upgrade,
+  search,
+  info,
+  deps_graph

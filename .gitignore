@@ -6,3 +6,4 @@
 
 deps/
 nim_deps/
+.cache/

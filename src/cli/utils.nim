@@ -1,25 +1,31 @@
 import
+  std/asyncdispatch,
+  std/httpclient,
   std/terminal,
   std/strutils,
-  std/macros,
+  std/strscans,
   std/unicode,
-  std/httpclient,
+  std/macros,
+  std/osproc,
+  std/json,
   std/os,
-  std/cpuinfo,
 
   taskpools,
-  QRgen,
   QRgen/private/Drawing,
+  QRgen,
 
-  ./ui
+  ./textutils,
+  ./types
 
 
 export
-  ui
+  textutils,
+  types
 
 
 var
   useEmoji*: bool = true
+  packagesFile* = getDataDir() / "nmr" / "packages.json"
 
 
 const PACKAGES = "https://raw.githubusercontent.com/nim-lang/packages/refs/heads/master/packages.json"
@@ -30,13 +36,6 @@ proc emoji*(e: string): string =
     e
   else:
     ""
-
-
-type
-  QrAlign* = enum
-    qraLeft,
-    qraCenter,
-    qraRight,
 
 
 proc printTerminalBeaty*(
@@ -102,7 +101,7 @@ proc downloadParallel(filename: string): bool =
   return true
 
 
-proc waitAndProgress[T](action: string, fv: Flowvar[T], color: ForegroundColor = fgCyan) =
+proc waitAndProgress*[T](action: string, fv: Flowvar[T], color: ForegroundColor = fgCyan) =
   var
     i = 0
     progresses = @["/", "-", "\\", "|"]
@@ -117,6 +116,22 @@ proc waitAndProgress[T](action: string, fv: Flowvar[T], color: ForegroundColor =
     stdout.cursorUp()
 
 
+proc waitAndProgress*[T](action: string, fut: Future[T], color: ForegroundColor = fgCyan) {.async.} =
+  var
+    i = 0
+    progresses = @["/", "-", "\\", "|"]
+  while not fut.finished and not fut.failed:
+    styledEcho color, "[", action, "] ", fgWhite, progresses[i]
+    if i == progresses.len-1:
+      i = 0
+    else:
+      inc i
+    await sleepAsync(50)
+    stdout.flushFile()
+    stdout.cursorUp()
+  styledEcho fgCyan, "[", action, "]", fgGreen, " Completed"
+
+
 proc fetchPackages*() =
   var tp = Taskpool.new(countProcessors())
   var x = tp.spawn downloadParallel(getDataDir() / "nmr" / "packages.json")
@@ -128,7 +143,6 @@ proc initCli*() =
   let
     nmrFolder = getDataDir() / "nmr"
     globalPackages = getDataDir() / "nmr" / "pkgs"
-    packagesFile = getDataDir() / "nmr" / "packages.json"
   if not dirExists(nmrFolder):
     createDir(nmrFolder)
   if not dirExists(globalPackages):
@@ -138,44 +152,151 @@ proc initCli*() =
     fetchPackages()
 
 
-# proc printTinyQRCode*(self: DrawedQRCode, clr: ForegroundColor = fgYellow) =
-#   ## QR → Braille, корректная нумерация точек + quiet zone + защита от выхода за границы
-#   let
-#     origSize = self.drawing.size.int
-#     qz       = 4                            # quiet zone в модулях
-#     size     = origSize + 2*qz
-#     width    = terminalWidth()
-#     outW     = (size + 1) div 2            # символов по горизонтали
-#     pad      = max(0, (width - outW) div 2)
-#     base     = 0x2800                       # U+2800
+proc gather*[T](futs: openarray[Future[T]]): auto =
+  when T is void:
+    var
+      retFuture = newFuture[void]("asyncdispatch.gather")
+      completedFutures = 0
 
-#   # 1) строим расширенную матрицу с quiet zone
-#   var mat = newSeq[seq[bool]](size)
-#   for y in 0..<size:
-#     mat[y] = newSeq[bool](size)
-#   for y in 0..<origSize:
-#     for x in 0..<origSize:
-#       if self.drawing[x.uint8, y.uint8]:
-#         mat[y+qz][x+qz] = true
+    let totalFutures = len(futs)
 
-#   # 2) вспомогательная таблица: dy,dx → вес бита в Braille
-#   let bitIndex = [[0, 3], [1, 4], [2, 5], [6, 7]]
+    for fut in futs:
+      fut.addCallback proc (f: Future[T]) =
+        inc(completedFutures)
+        if not retFuture.finished:
+          if f.failed:
+            retFuture.fail(f.error)
+          else:
+            if completedFutures == totalFutures:
+              retFuture.complete()
 
-#   # 3) печатаем по блокам 2×4 → один Braille-символ
-#   stdout.setForegroundColor(clr)
-#   for y in countup(0, size-1, 4):
-#     stdout.write " ".repeat(pad)
-#     for x in countup(0, size-1, 2):
-#       var mask = 0
-#       for dy in 0..<4:
-#         for dx in 0..<2:
-#           let yy = y + dy
-#           let xx = x + dx
-#           # проверяем, что не вышли за границы
-#           if yy < size and xx < size and mat[yy][xx]:
-#             mask = mask or (1 shl bitIndex[dy][dx])
-#       stdout.write $(cast[Rune](base + mask))
-#     stdout.write "\n"
-#   stdout.resetAttributes()
+    if totalFutures == 0:
+      retFuture.complete()
+
+    return retFuture
+
+  else:
+    var
+      retFuture = newFuture[seq[T]]("asyncdispatch.gather")
+      retValues = newSeq[T](len(futs))
+      completedFutures = 0
+
+    for i, fut in futs:
+      proc setCallback(i: int) =
+        fut.addCallback proc (f: Future[T]) =
+          inc(completedFutures)
+          if not retFuture.finished:
+            if f.failed:
+              retFuture.fail(f.error)
+            else:
+              retValues[i] = f.read()
+
+              if completedFutures == len(retValues):
+                retFuture.complete(retValues)
+
+      setCallback(i)
+
+    if retValues.len == 0:
+      retFuture.complete(retValues)
+
+    return retFuture
 
 
+proc vop(input: string; strVal: var string; start: int): int =
+  # matches exactly ``n`` digits. Matchers need to return 0 if nothing
+  # matched or otherwise the number of processed chars.
+  if start+1 < input.len and input[start..start+1] in [">=", "<=", "~=", "==", "^="]:
+    result = 2
+    strVal = input[start..start+1]
+  elif start < input.len and input[start] in {'<', '>', '@'}:
+    result = 1
+    strVal = $input[start]
+
+
+proc parseNimbleFile*(filename: string): Dependency =
+  if not fileExists(filename):
+    return nil
+
+  let (dir, name, ext) = filename.splitFile()
+  var
+    tmp = ""
+    version = ""
+    f = open(filename, fmRead)
+  let data = f.readAll()
+  f.close()
+
+  if data.scanf("$*version$s=$s\"$*\"", tmp, version):
+    discard
+  
+  result = Dependency(children: @[], name: name, version: version, parent: nil)
+
+  for i in data.split("\n"):
+    var
+      pkg, op, version: string
+    if i.scanf("$srequires$s\"$w$s${vop}$s$*\"", pkg, op, version):
+      discard
+    if pkg.len > 0 and version.len > 0 and pkg.toLower() != "nim":
+      result.children.add Dependency(parent: result, children: @[], name: pkg, version: op & " " & version)
+
+
+proc getBranches*(repo: string, args: seq[string] = @["--heads"]): seq[tuple[hash, name: string]] =
+  result = @[]
+  let (output, exitCode) = execCmdEx("git ls-remote " & args.join(" ") & " " & repo)
+  for i in output.split("\n"):
+    var hash, name: string
+    if i.scanf("$w$s$+", hash, name):
+      result.add((hash: hash, name: name))
+
+
+proc processDep*(dep: ptr Dependency, packages: ptr JsonNode) {.async.} =
+  try:
+    var pkg: JsonNode
+    for package in packages[]:
+      if "name" in package and dep.name.toLower() == package["name"].str.toLower():
+        pkg = package
+        break
+    if pkg.isNil:
+      return
+    var client = newAsyncHttpClient()
+    if "method" in pkg:
+      case pkg["method"].str
+      of "hg":
+        discard
+      of "git":
+        var ghPath = pkg["url"].str.split("github.com/")[1]
+        ghPath.removeSuffix(".git")
+        let
+          url = "https://raw.githubusercontent.com/" & ghPath & "/HEAD/" & pkg["name"].str & ".nimble"
+          filename = ".cache/nmr/graph/" & dep.name & ".nimble"
+        await client.downloadFile(url, filename)
+        var currentDep = parseNimbleFile(filename)
+        if currentDep.isNil:
+          return
+        
+        var childFuts: seq[Future[void]] = @[]
+        for nextDep in currentDep.children:
+          childFuts.add processDep(addr nextDep, packages)
+          dep[].children.add nextDep
+        await gather(childFuts)
+  except:
+    echo getCurrentExceptionMsg()
+
+
+proc depsGraph*(filename: string): Future[Dependency] {.async.} =
+  var f = open(packagesFile, fmRead)
+  let packages = parseJson(f.readAll())
+  f.close()
+
+  if not dirExists(".cache"): createDir(".cache")
+  if not dirExists(".cache/nmr"): createDir(".cache/nmr")
+  if not dirExists(".cache/nmr/graph"): createDir(".cache/nmr/graph")
+  
+  result = parseNimbleFile(filename)
+
+  if result.isNil:
+    return result
+
+  var rootFuts: seq[Future[void]] = @[]
+  for dep in result.children:
+    rootFuts.add processDep(addr dep, addr packages)
+  await waitAndProgress("Fetching packages", gather(rootFuts))
