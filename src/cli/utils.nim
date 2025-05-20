@@ -3,7 +3,11 @@ import
   std/strutils,
   std/macros,
   std/unicode,
+  std/httpclient,
+  std/os,
+  std/cpuinfo,
 
+  taskpools,
   QRgen,
   QRgen/private/Drawing,
 
@@ -16,6 +20,9 @@ export
 
 var
   useEmoji*: bool = true
+
+
+const PACKAGES = "https://raw.githubusercontent.com/nim-lang/packages/refs/heads/master/packages.json"
 
 
 proc emoji*(e: string): string =
@@ -42,11 +49,12 @@ proc printTerminalBeaty*(
   let
     size = self.drawing.size
     width = terminalWidth()
+    ESC = "\x1b["
     padding =
       case align
       of qraLeft: 0
       of qraCenter: (width - self.drawing.size.int) div 2
-      of qraRight: (width - self.drawing.size.int)
+      of qraRight: (width - self.drawing.size.int) - 1
   var result: string = newStringOfCap((size.uint16 * 2 + 11) * size + 10)
   stdout.setForegroundColor(clr)
   if not flush:
@@ -55,15 +63,11 @@ proc printTerminalBeaty*(
     for y in countup(0, size.int, 2):
       stdout.cursorUp()
   for y in countup(0, size.int, 2):
-    if not flush:
-      result.add " ".repeat(padding)
-    else:
+    if flush:
       stdout.cursorDown()
-      let (x, y) = getCursorPos()
-      if x < padding:
-        stdout.cursorForward(padding - x)
-      elif x > padding:
-        stdout.cursorBackward(x - padding)
+      setCursorXPos(padding)
+    else:
+      result.add " ".repeat(padding)
     for x in 0..<size.int:
       let top    = self.drawing[x.uint8, y.uint8]
       let bottom = if y.uint8+1 < size.uint8: self.drawing[x.uint8, y.uint8+1] else: false
@@ -77,17 +81,61 @@ proc printTerminalBeaty*(
         else:
           " "
       if flush:
-        result.add ch
-      else:
         stdout.write ch
+      else:
+        result.add ch
     if flush:
-      result.add "\n"
+      discard # stdout.cursorDown()
     else:
-      stdout.write "\n"
-  if flush:
+      result.add "\n"
+  if not flush:
     result.add "\n"
     stdout.write result
   stdout.resetAttributes()
+
+
+proc downloadParallel(filename: string): bool =
+  try:
+    downloadFile(newHttpClient(), PACKAGES, filename)
+  except:
+    echo getCurrentExceptionMsg()
+  return true
+
+
+proc waitAndProgress[T](action: string, fv: Flowvar[T], color: ForegroundColor = fgCyan) =
+  var
+    i = 0
+    progresses = @["/", "-", "\\", "|"]
+  while not fv.isReady:
+    styledEcho color, "[", action, "] ", fgWhite, progresses[i]
+    if i == progresses.len-1:
+      i = 0
+    else:
+      inc i
+    sleep(50)
+    stdout.flushFile()
+    stdout.cursorUp()
+
+
+proc fetchPackages*() =
+  var tp = Taskpool.new(countProcessors())
+  var x = tp.spawn downloadParallel(getDataDir() / "nmr" / "packages.json")
+  waitAndProgress("Fetching packages", x)
+  styledEcho fgCyan, "[Fetching packages]", fgGreen, " Completed"
+
+
+proc initCli*() =
+  let
+    nmrFolder = getDataDir() / "nmr"
+    globalPackages = getDataDir() / "nmr" / "pkgs"
+    packagesFile = getDataDir() / "nmr" / "packages.json"
+  if not dirExists(nmrFolder):
+    createDir(nmrFolder)
+  if not dirExists(globalPackages):
+    createDir(globalPackages)
+  
+  if not fileExists(packagesFile):
+    fetchPackages()
 
 
 # proc printTinyQRCode*(self: DrawedQRCode, clr: ForegroundColor = fgYellow) =

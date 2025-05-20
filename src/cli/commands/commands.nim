@@ -1,6 +1,8 @@
 import
-  ./help
+  ./help,
+  ./upgrade
 
 
 export
-  help
+  help,
+  upgrade
