@@ -1,0 +1,8 @@
+*.exe
+*.js
+
+*.log
+*.lg
+
+deps/
+nim_deps/
