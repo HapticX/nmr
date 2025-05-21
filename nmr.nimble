@@ -18,3 +18,4 @@ requires "cligen >= 1.8.4"
 requires "qrgen >= 3.1.0"
 
 requires "taskpools >= 0.1.0"
+requires "zippy"

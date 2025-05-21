@@ -1,5 +1,6 @@
 import
   std/asyncdispatch,
+  std/asyncfile,
   std/httpclient,
   std/terminal,
   std/strutils,
@@ -10,6 +11,7 @@ import
   std/json,
   std/os,
 
+  zippy/ziparchives,
   taskpools,
   QRgen/private/Drawing,
   QRgen,
@@ -235,6 +237,9 @@ proc parseNimbleFile*(filename: string): Dependency =
       pkg, op, version: string
     if i.scanf("$srequires$s\"$w$s${vop}$s$*\"", pkg, op, version):
       discard
+    elif i.scanf("$srequires$s\"$w\"", pkg):
+      op = ""
+      version = ""
     if pkg.len > 0 and version.len > 0 and pkg.toLower() != "nim":
       result.children.add Dependency(parent: result, children: @[], name: pkg, version: op & " " & version)
 
@@ -248,13 +253,24 @@ proc getBranches*(repo: string, args: seq[string] = @["--heads"]): seq[tuple[has
       result.add((hash: hash, name: name))
 
 
+proc findPackage*(name: string, packages: JsonNode): JsonNode =
+  var pkg: JsonNode
+  for package in packages:
+    if "name" in package and name.toLower() == package["name"].str.toLower():
+      pkg = package
+      if "alias" in pkg:
+        pkg = findPackage(pkg["alias"].str, packages)
+      break
+  pkg
+
+
 proc processDep*(dep: Dependency, packages: JsonNode) {.async.} =
   try:
-    var pkg: JsonNode
-    for package in packages:
-      if "name" in package and dep.name.toLower() == package["name"].str.toLower():
-        pkg = package
-        break
+    if not dirExists(".cache"): createDir(".cache")
+    if not dirExists(".cache/nmr"): createDir(".cache/nmr")
+    if not dirExists(".cache/nmr/graph"): createDir(".cache/nmr/graph")
+
+    var pkg = findPackage(dep.name, packages)
     if pkg.isNil:
       return
     var client = newAsyncHttpClient()
@@ -268,7 +284,32 @@ proc processDep*(dep: Dependency, packages: JsonNode) {.async.} =
         let
           url = "https://raw.githubusercontent.com/" & ghPath & "/HEAD/" & pkg["name"].str & ".nimble"
           filename = ".cache/nmr/graph/" & dep.name & ".nimble"
-        await client.downloadFile(url, filename)
+        var data = await client.get(url)
+        if data.code == Http200:
+          var f = openAsync(filename, fmWrite)
+          await f.write(await data.body)
+          f.close()
+        else:
+          let
+            urlZip = "https://github.com/" & ghPath & "/archive/HEAD/" & pkg["name"].str & ".zip"
+            filenameZip = ".cache/nmr/graph/" & ghPath.split("/")[1] & ".zip"
+          await client.downloadFile(urlZip, filenameZip)
+          # walk through .zip
+          let reader = openZipArchive(filenameZip)
+          try:
+            var archiveFile = ""
+            for file in reader.walkFiles:
+              if file.endsWith(".nimble"):
+                archiveFile = file
+                break
+            if archiveFile.len > 0:
+              var f = openAsync(filename, fmWrite)
+              await f.write(reader.extractFile(archiveFile))
+              f.close()
+          finally:
+            reader.close()
+          removeFile(filenameZip)
+        
         var currentDep = parseNimbleFile(filename)
         if currentDep.isNil:
           return
@@ -283,13 +324,9 @@ proc processDep*(dep: Dependency, packages: JsonNode) {.async.} =
 
 
 proc depsGraph*(filename: string): Future[Dependency] {.async.} =
-  var f = open(packagesFile, fmRead)
-  let packages = parseJson(f.readAll())
+  var f = openAsync(packagesFile, fmRead)
+  let packages = parseJson(await f.readAll())
   f.close()
-
-  if not dirExists(".cache"): createDir(".cache")
-  if not dirExists(".cache/nmr"): createDir(".cache/nmr")
-  if not dirExists(".cache/nmr/graph"): createDir(".cache/nmr/graph")
   
   result = parseNimbleFile(filename)
 
