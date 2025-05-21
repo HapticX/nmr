@@ -248,10 +248,10 @@ proc getBranches*(repo: string, args: seq[string] = @["--heads"]): seq[tuple[has
       result.add((hash: hash, name: name))
 
 
-proc processDep*(dep: ptr Dependency, packages: ptr JsonNode) {.async.} =
+proc processDep*(dep: Dependency, packages: JsonNode) {.async.} =
   try:
     var pkg: JsonNode
-    for package in packages[]:
+    for package in packages:
       if "name" in package and dep.name.toLower() == package["name"].str.toLower():
         pkg = package
         break
@@ -275,7 +275,7 @@ proc processDep*(dep: ptr Dependency, packages: ptr JsonNode) {.async.} =
         
         var childFuts: seq[Future[void]] = @[]
         for nextDep in currentDep.children:
-          childFuts.add processDep(addr nextDep, packages)
+          childFuts.add processDep(nextDep, packages)
           dep[].children.add nextDep
         await gather(childFuts)
   except:
@@ -298,5 +298,5 @@ proc depsGraph*(filename: string): Future[Dependency] {.async.} =
 
   var rootFuts: seq[Future[void]] = @[]
   for dep in result.children:
-    rootFuts.add processDep(addr dep, addr packages)
-  await waitAndProgress("Fetching packages", gather(rootFuts))
+    rootFuts.add processDep(dep, packages)
+  await gather(rootFuts)

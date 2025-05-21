@@ -21,19 +21,20 @@ proc upgradeCommandAux*(hlp: bool = false): int =
   upgradeCommand(hlp)
   QuitSuccess
 
-proc searchCommandAux*(hlp: bool = false, limit: int = 20, args: seq[string]): int =
+proc searchCommandAux*(hlp: bool = false, limit: int = 10, json: bool = false, args: seq[string]): int =
   if args.len == 0:
     styledEcho fgRed, "Error: ", fgWhite, "no search query provided.\n"
     styledEcho "Try `", fgYellow, "nmr ", fgMagenta, "search", fgYellow, " --help", fgWhite, "` for more information."
-  searchCommand(hlp, limit, args)
+    return QuitSuccess
+  searchCommand(hlp, limit, json, args)
   QuitSuccess
 
 proc infoCommandAux*(args: seq[string]): int =
   infoCommand(args)
   QuitSuccess
 
-proc depsGraphCommandAux*(args: seq[string]): int =
-  depsGraphCommand(args)
+proc depsGraphCommandAux*(hlp: bool = false, args: seq[string]): int =
+  depsGraphCommand(hlp, args)
   QuitSuccess
 
 
@@ -71,13 +72,12 @@ proc mainMessage*() =
 
   stdout.cursorUp()
   setCursorXPos(0)
-  styledEcho "  - ",    fgYellow, "nmr ", fgMagenta, "search ", fgBlue, "<package>"
+  styledEcho "  - ",    fgYellow, "nmr ", fgMagenta, "search ", fgBlue, "<query>"
   styledEcho "  - ",    fgYellow, "nmr ", fgMagenta, "info ", fgBlue, "<package>\n"
 
 
 
 when isMainModule:
-  clCfg.helpSyntax = "?"
   dispatchMultiGen(
     [helpCommandAux, cmdName = "help"],
     [upgradeCommandAux, cmdName = "upgrade"],
@@ -104,11 +104,18 @@ when isMainModule:
     pars.delete(pars.find("--hide-qr"))
     hideQr = true
   
+  # Replace flags
   if pars.find("-l") != -1:
     let p = pars.find("-l")
     pars.delete(p)
     pars.insert("--limit", p)
   
+  # Flags
+  if pars.find("-j") != -1:
+    pars.delete(pars.find("-j"))
+    pars.add("--json")
+  
+  # Helo override
   if pars.find("-h") != -1:
     pars.delete(pars.find("-h"))
     pars.add("--hlp")
