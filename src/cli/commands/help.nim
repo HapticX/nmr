@@ -10,7 +10,7 @@ proc helpCommand*() =
   styledEcho fgMagenta, "  init", fgWhite, "           Initialize a new project"
   styledEcho fgMagenta, "  install", fgWhite, "        Install package(s) and deps"
   styledEcho fgMagenta, "  update", fgWhite, "         Update package(s) by semver"
-  styledEcho fgMagenta, "  upgrade|up", fgWhite, "     Upgrade package(s) to latest"
+  styledEcho fgMagenta, "  upgrade|up", fgWhite, "     Upgrade packages list to latest"
   styledEcho fgMagenta, "  remove", fgWhite, "         Remove package(s)"
   styledEcho fgMagenta, "  deps-graph|dg", fgWhite, "  Show dependency graph"
   styledEcho fgMagenta, "  publish", fgWhite, "        Publish a package"
