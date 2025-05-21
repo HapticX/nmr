@@ -3,7 +3,8 @@ import
   ./upgrade,
   ./search,
   ./info,
-  ./deps_graph
+  ./deps_graph,
+  ./clean_cache
 
 
 export
@@ -11,4 +12,5 @@ export
   upgrade,
   search,
   info,
-  deps_graph
+  deps_graph,
+  clean_cache

@@ -1,5 +1,8 @@
 import
-  std/strutils
+  std/strformat,
+  std/strutils,
+  std/tables
+
 
 type
   Dependency* = ref object
@@ -12,22 +15,27 @@ type
     qraRight
 
 
-proc pretty*(dep: Dependency, prefix: string = "", isLast: bool = true): string =
-  var res = newStringOfCap(128)
+proc pretty*(
+    dep: Dependency,
+    prefix: string = "",
+    isLast: bool = true,
+    seen: var Table[string, bool]
+): string =
+  result = newStringOfCap(128)
+  let
+    key = fmt"{dep.name} {dep.version}"
+    branch = if prefix.len > 0:
+               if isLast: "└─ " else: "├─ "
+             else: ""
+  result.add prefix & branch & key & "\n"
+  if not seen.hasKey(key):
+    seen[key] = true
+    let childPrefix = prefix & (if isLast: "   " else: "│  ")
+    for i, child in dep.children:
+      let lastChild = i == dep.children.len - 1
+      result.add pretty(child, childPrefix, lastChild, seen)
 
-  if prefix.len > 0:
-    let branch = if isLast: "└─ " else: "├─ "
-    res.add prefix & branch & dep.name & " " & dep.version & "\n"
-  else:
-    res.add dep.name & " " & dep.version & "\n"
 
-  let childPrefix = prefix & (if isLast: "   " else: "│  ")
-
-  for i, child in dep.children:
-    let lastChild = i == dep.children.len - 1
-    res.add pretty(child, childPrefix, lastChild)
-
-  return res
-
-
-proc `$`*(dep: Dependency): string = pretty(dep)
+proc `$`*(dep: Dependency): string =
+  var seen = initTable[string, bool]()
+  pretty(dep, seen = seen)

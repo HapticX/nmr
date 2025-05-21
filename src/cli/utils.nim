@@ -264,7 +264,7 @@ proc findPackage*(name: string, packages: JsonNode): JsonNode =
   pkg
 
 
-proc processDep*(dep: Dependency, packages: JsonNode) {.async.} =
+proc processDep*(dep: Dependency, packages: JsonNode, useCache: bool = true) {.async.} =
   try:
     if not dirExists(".cache"): createDir(".cache")
     if not dirExists(".cache/nmr"): createDir(".cache/nmr")
@@ -284,31 +284,32 @@ proc processDep*(dep: Dependency, packages: JsonNode) {.async.} =
         let
           url = "https://raw.githubusercontent.com/" & ghPath & "/HEAD/" & pkg["name"].str & ".nimble"
           filename = ".cache/nmr/graph/" & dep.name & ".nimble"
-        var data = await client.get(url)
-        if data.code == Http200:
-          var f = openAsync(filename, fmWrite)
-          await f.write(await data.body)
-          f.close()
-        else:
-          let
-            urlZip = "https://github.com/" & ghPath & "/archive/HEAD/" & pkg["name"].str & ".zip"
-            filenameZip = ".cache/nmr/graph/" & ghPath.split("/")[1] & ".zip"
-          await client.downloadFile(urlZip, filenameZip)
-          # walk through .zip
-          let reader = openZipArchive(filenameZip)
-          try:
-            var archiveFile = ""
-            for file in reader.walkFiles:
-              if file.endsWith(".nimble"):
-                archiveFile = file
-                break
-            if archiveFile.len > 0:
-              var f = openAsync(filename, fmWrite)
-              await f.write(reader.extractFile(archiveFile))
-              f.close()
-          finally:
-            reader.close()
-          removeFile(filenameZip)
+        if not useCache or not fileExists(filename):
+          var data = await client.get(url)
+          if data.code == Http200:
+            var f = openAsync(filename, fmWrite)
+            await f.write(await data.body)
+            f.close()
+          else:
+            let
+              urlZip = "https://github.com/" & ghPath & "/archive/HEAD/" & pkg["name"].str & ".zip"
+              filenameZip = ".cache/nmr/graph/" & ghPath.split("/")[1] & ".zip"
+            await client.downloadFile(urlZip, filenameZip)
+            # walk through .zip
+            let reader = openZipArchive(filenameZip)
+            try:
+              var archiveFile = ""
+              for file in reader.walkFiles:
+                if file.endsWith(".nimble"):
+                  archiveFile = file
+                  break
+              if archiveFile.len > 0:
+                let data = reader.extractFile(archiveFile)
+                var f = openAsync(filename, fmWrite)
+                await f.write(data)
+                f.close()
+            finally:
+              reader.close()
         
         var currentDep = parseNimbleFile(filename)
         if currentDep.isNil:
@@ -316,14 +317,14 @@ proc processDep*(dep: Dependency, packages: JsonNode) {.async.} =
         
         var childFuts: seq[Future[void]] = @[]
         for nextDep in currentDep.children:
-          childFuts.add processDep(nextDep, packages)
+          childFuts.add processDep(nextDep, packages, useCache)
           dep[].children.add nextDep
         await gather(childFuts)
   except:
     echo getCurrentExceptionMsg()
 
 
-proc depsGraph*(filename: string): Future[Dependency] {.async.} =
+proc depsGraph*(filename: string, useCache: bool = true): Future[Dependency] {.async.} =
   var f = openAsync(packagesFile, fmRead)
   let packages = parseJson(await f.readAll())
   f.close()
@@ -335,5 +336,5 @@ proc depsGraph*(filename: string): Future[Dependency] {.async.} =
 
   var rootFuts: seq[Future[void]] = @[]
   for dep in result.children:
-    rootFuts.add processDep(dep, packages)
+    rootFuts.add processDep(dep, packages, useCache)
   await gather(rootFuts)

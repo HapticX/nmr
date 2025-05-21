@@ -33,8 +33,12 @@ proc infoCommandAux*(args: seq[string]): int =
   infoCommand(args)
   QuitSuccess
 
-proc depsGraphCommandAux*(hlp: bool = false, args: seq[string]): int =
-  depsGraphCommand(hlp, args)
+proc depsGraphCommandAux*(hlp: bool = false, noCache: bool = false, args: seq[string]): int =
+  depsGraphCommand(hlp, not noCache, args)
+  QuitSuccess
+
+proc cleanCacheCommandAux*(hlp: bool = false, skipNimble: bool = false, skipArchive: bool = false): int =
+  cleanCacheCommand(hlp, skipNimble, skipArchive)
   QuitSuccess
 
 
@@ -73,7 +77,8 @@ proc mainMessage*() =
   stdout.cursorUp()
   setCursorXPos(0)
   styledEcho "  - ",    fgYellow, "nmr ", fgMagenta, "search ", fgBlue, "<query>"
-  styledEcho "  - ",    fgYellow, "nmr ", fgMagenta, "info ", fgBlue, "<package>\n"
+  styledEcho "  - ",    fgYellow, "nmr ", fgMagenta, "info ", fgBlue, "<package>"
+  styledEcho "  - ",    fgYellow, "nmr ", fgMagenta, "clean-cache\n"
 
 
 
@@ -84,6 +89,7 @@ when isMainModule:
     [searchCommandAux, cmdName = "search"],
     [infoCommandAux, cmdName = "info"],
     [depsGraphCommandAux, cmdName = "depsgraph"],
+    [cleanCacheCommandAux, cmdName = "cleancache"],
   )
   initCli()
 
@@ -114,6 +120,15 @@ when isMainModule:
   if pars.find("-j") != -1:
     pars.delete(pars.find("-j"))
     pars.add("--json")
+  if pars.find("-sn") != -1:
+    pars.delete(pars.find("-sn"))
+    pars.add("--skip-nimble")
+  if pars.find("-sa") != -1:
+    pars.delete(pars.find("-sa"))
+    pars.add("--skip-archive")
+  if pars.find("-nc") != -1:
+    pars.delete(pars.find("-nc"))
+    pars.add("--no-cache")
   
   # Helo override
   if pars.find("-h") != -1:
@@ -134,6 +149,8 @@ when isMainModule:
     quit(dispatchinfo(cmdLine = pars[1..^1]))
   of "deps-graph", "depsgraph", "dg":
     quit(dispatchdepsgraph(cmdLine = pars[1..^1]))
+  of "clean-cache", "cleancache", "clnc", "cache-clean", "cacheclean":
+    quit(dispatchcleancache(cmdLine = pars[1..^1]))
   else:
     if pars.find("--hlp") != -1:
       quit(dispatchhelp(cmdLine = pars[1..^1]))

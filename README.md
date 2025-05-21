@@ -29,6 +29,7 @@ List of available commands:
 - [x] `upgrade|up` - Upgrade packages list to latest
 - [ ] `remove` - Remove package(s)
 - [x] `deps-graph|dg` - Show dependency graph
+- [x] `clean-cache|clnc` - Show dependency graph
 - [ ] `publish` - Publish a package
 - [x] `search|s` - Search for packages
 - [ ] `info` - Shows info about package
