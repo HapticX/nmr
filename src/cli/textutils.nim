@@ -151,7 +151,7 @@ proc enterValue*(
   stdout.cursorUp()
   stdout.setCursorXPos(0)
   if defaultValue.len > result.len:
-    styledEcho fgGreen, emoji"✔", fgCyan, fmt" {title} > ", fgGreen, result, " ".repeat(defaultValue.len - result.len)
+    styledEcho fgGreen, emoji"✔", fgCyan, fmt" {title} > ", fgGreen, result, bgBlack, " ".repeat(defaultValue.len)
   else:
     styledEcho fgGreen, emoji"✔", fgCyan, fmt" {title} > ", fgGreen, result
 

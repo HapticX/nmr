@@ -15,7 +15,8 @@ proc infoCommand*(packages: seq[string]) =
   if dep.isNil:
     styledEcho fgRed, "Error: ", fgWhite, "no any .nimble file here."
   else:
+    styledEcho "Package:"
     styledEcho fgYellow, dep.name, " ", fgRed, " v" & dep.version
-    styledEcho "Dependencies:"
+    styledEcho "\nDependencies:"
     for i in dep.children:
-      echo i
+      stdout.write $i

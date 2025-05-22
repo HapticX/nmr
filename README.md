@@ -32,4 +32,4 @@ List of available commands:
 - [x] `clean-cache|clnc` - Show dependency graph
 - [ ] `publish` - Publish a package
 - [x] `search|s` - Search for packages
-- [ ] `info` - Shows info about package
+- [x] `info` - Shows info about package

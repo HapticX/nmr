@@ -141,4 +141,6 @@ proc initCommand*(
   createFile(pkgName / "tests" / "config.nims", fmt(testConfigFileTemplate))
   createFile(pkgName / "tests" / "test.nim", fmt(testFileTemplate))
 
+  styledEcho fgGreen, "\nSuccess: ", fgWhite, "Package ", fgYellow, pkgName, fgWhite, " was created."
+
   illwillDeinit()
