@@ -223,7 +223,8 @@ proc enterValue*(
     stdout.styledWrite fgGreen, "?", fgCyan, fmt" {title} > ", colored(defaultValue, 100, 100, 100)
     # return caret
     let (x, y) = getCursorPos()
-    stdout.setCursorXPos(x - defaultValue.len)
+    let valueX = x - defaultValue.len
+    stdout.setCursorXPos(valueX)
     stdout.styledWrite fgWhite, bgBlack
 
     while true:
@@ -233,6 +234,8 @@ proc enterValue*(
       elif key == 3 or key == 7:  # Ctrl-C or Esc
         quit(QuitSuccess)
       elif key == 8:  # Backspace
+        stdout.cursorBackward()
+        stdout.write " "
         if input.len > 0:
           input = input[0..^2]
       elif key > 0:
@@ -252,7 +255,6 @@ proc enterValue*(
     if result.len == 0:
       if defaultValue.len > 0:
         break
-      stdout.cursorUp()
       stdout.setCursorXPos(0)
   
   if input.len == 0:
