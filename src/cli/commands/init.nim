@@ -121,7 +121,7 @@ proc initCommand*(
     pkgAuthor = enterValue("Package author", author)
     pkgDescription = enterValue("Package description", description)
     pkgMinNimVersion = enterValue("Minimum Nim version", minNimVersion)
-    pkgLicense = chooseOption("Choose pacakge license", licenseList, license)
+    pkgLicense = chooseOption("Choose package license", licenseList, license)
     srcDir = "src"
   
 

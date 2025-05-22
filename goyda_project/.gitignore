@@ -1,0 +1,12 @@
+# Builds
+*.exe
+*.js
+
+# Logs
+*.log
+*.lg
+
+# Cache
+.cache/
+deps/
+nim_deps/
