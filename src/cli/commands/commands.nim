@@ -4,7 +4,8 @@ import
   ./search,
   ./info,
   ./deps_graph,
-  ./clean_cache
+  ./clean_cache,
+  ./init
 
 
 export
@@ -13,4 +14,5 @@ export
   search,
   info,
   deps_graph,
-  clean_cache
+  clean_cache,
+  init

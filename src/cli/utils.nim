@@ -25,19 +25,13 @@ export
   types
 
 
-var
-  useEmoji*: bool = true
-  packagesFile* = getDataDir() / "nmr" / "packages.json"
-
-
 const PACKAGES = "https://raw.githubusercontent.com/nim-lang/packages/refs/heads/master/packages.json"
 
 
-proc emoji*(e: string): string =
-  if useEmoji:
-    e
-  else:
-    ""
+proc createFile*(filename, content: string) =
+  var f = open(filename, fmWrite)
+  f.write(content)
+  f.close()
 
 
 proc printTerminalBeaty*(

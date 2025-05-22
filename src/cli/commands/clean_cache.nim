@@ -15,7 +15,7 @@ proc cleanCacheCommand*(help: bool = false, skipNimble: bool = true, skipArchive
     styledEcho "Options:"
     styledEcho fgYellow, "  -sn", fgWhite, ",", fgYellow, " --skip-nimble", fgWhite, "    Skip *.nimble files"
     styledEcho fgYellow, "  -sa", fgWhite, ",", fgYellow, " --skip-archive", fgWhite, "   Skip *.zip archives"
-    styledEcho fgYellow, "  -h", fgWhite, ",", fgYellow, " --help", fgWhite, "            Show this help\n"
+    styledEcho fgYellow, "  -h", fgWhite, ",", fgYellow, "  --help", fgWhite, "           Show this help\n"
     styledEcho "Examples:"
     styledEcho fgYellow, "  nmr", fgMagenta, " clean-cache"
     styledEcho fgYellow, "  nmr", fgMagenta, " clnc ", fgBlue, "--skip-nimble"

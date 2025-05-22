@@ -15,7 +15,7 @@ proc depsGraphCommand*(help: bool = false, useCache: bool = true, packages: seq[
     styledEcho fgYellow, "  dg ", fgWhite, "|", fgYellow, " depsgraph\n"
     styledEcho "Options:"
     styledEcho fgYellow, "  -nc", fgWhite, ",", fgYellow, " --no-cache", fgWhite, "    Forced fetching of dependency data"
-    styledEcho fgYellow, "  -h", fgWhite, ",", fgYellow, " --help", fgWhite, "    Show this help\n"
+    styledEcho fgYellow, "  -h", fgWhite, ",", fgYellow, "  --help", fgWhite, "        Show this help\n"
     styledEcho "Examples:"
     styledEcho fgYellow, "  nmr", fgMagenta, " deps-graph", fgWhite, "          Shows deps graph of current package"
     styledEcho fgYellow, "  nmr", fgMagenta, " deps-graph", fgRed, " happyx", fgWhite, "   Shows deps graph of happyx package"

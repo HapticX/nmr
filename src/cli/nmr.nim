@@ -41,6 +41,18 @@ proc cleanCacheCommandAux*(hlp: bool = false, skipNimble: bool = false, skipArch
   cleanCacheCommand(hlp, skipNimble, skipArchive)
   QuitSuccess
 
+proc initCommandAux*(
+    hlp: bool = false,
+    name: string = "",
+    description: string = "Just another Nim package",
+    version: string = "0.0.1",
+    author: string = "",
+    license: string = "MIT",
+    minNimVersion: string = "1.6.14",
+): int =
+  initCommand(hlp, name, description, version, author, license, minNimVersion)
+  QuitSuccess
+
 
 proc mainMessage*() =
   stdout.eraseScreen()
@@ -90,6 +102,7 @@ when isMainModule:
     [infoCommandAux, cmdName = "info"],
     [depsGraphCommandAux, cmdName = "depsgraph"],
     [cleanCacheCommandAux, cmdName = "cleancache"],
+    [initCommandAux, cmdName = "init"],
   )
   initCli()
 
@@ -120,6 +133,24 @@ when isMainModule:
   if pars.find("-j") != -1:
     pars.delete(pars.find("-j"))
     pars.add("--json")
+  if pars.find("-n") != -1:
+    pars.delete(pars.find("-n"))
+    pars.add("--name")
+  if pars.find("-v") != -1:
+    pars.delete(pars.find("-v"))
+    pars.add("--version")
+  if pars.find("-d") != -1:
+    pars.delete(pars.find("-d"))
+    pars.add("--description")
+  if pars.find("-nv") != -1:
+    pars.delete(pars.find("-nv"))
+    pars.add("--min-nim-version")
+  if pars.find("-A") != -1:
+    pars.delete(pars.find("-A"))
+    pars.add("--author")
+  if pars.find("-Li") != -1:
+    pars.delete(pars.find("-Li"))
+    pars.add("--license")
   if pars.find("-sn") != -1:
     pars.delete(pars.find("-sn"))
     pars.add("--skip-nimble")
@@ -151,6 +182,8 @@ when isMainModule:
     quit(dispatchdepsgraph(cmdLine = pars[1..^1]))
   of "clean-cache", "cleancache", "clnc", "cache-clean", "cacheclean":
     quit(dispatchcleancache(cmdLine = pars[1..^1]))
+  of "init":
+    quit(dispatchinit(cmdLine = pars[1..^1]))
   else:
     if pars.find("--hlp") != -1:
       quit(dispatchhelp(cmdLine = pars[1..^1]))

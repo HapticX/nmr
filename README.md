@@ -23,7 +23,7 @@ nmr
 Run `nmr <command> --help` for detailed usage.
 
 List of available commands:
-- [ ] `init` - Initialize a new project
+- [x] `init` - Initialize a new project
 - [ ] `install` - Install package(s) and deps
 - [ ] `update` - Update package(s) by semver
 - [x] `upgrade|up` - Upgrade packages list to latest
