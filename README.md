@@ -33,3 +33,11 @@ List of available commands:
 - [ ] `publish` - Publish a package
 - [x] `search|s` - Search for packages
 - [x] `info` - Shows info about package
+
+
+## How It Works
+`nmr` keeps all your dependencies locally in one folder - `deps`.
+
+When you install any libraries via `nmr`, it finds any `FILENAME.nim.cfg` and `config.nims` inside your project and injects into these config files `--path:"..."` lines for dependencies work.
+
+Also `nmr` creates `.cache` folder inside your project to keep all cached dependencies to use it in `deps-graph` and `install` commands.
