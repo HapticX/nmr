@@ -5,7 +5,8 @@ import
   ./info,
   ./deps_graph,
   ./clean_cache,
-  ./init
+  ./init,
+  ./install
 
 
 export
@@ -15,4 +16,5 @@ export
   info,
   deps_graph,
   clean_cache,
-  init
+  init,
+  install

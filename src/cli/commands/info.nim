@@ -13,7 +13,7 @@ proc infoCommand*(packages: seq[string]) =
       dep = parseNimbleFile(file)
   
   if dep.isNil:
-    styledEcho fgRed, "Error: ", fgWhite, "no any .nimble file here."
+    styledEcho fgRed, "Error: ", fgWhite, "this is not a nim package."
   else:
     styledEcho "Package:"
     styledEcho fgYellow, dep.name, " ", fgRed, " v" & dep.version

@@ -37,6 +37,10 @@ proc depsGraphCommandAux*(hlp: bool = false, noCache: bool = false, args: seq[st
   depsGraphCommand(hlp, not noCache, args)
   QuitSuccess
 
+proc installCommandAux*(hlp: bool = false, global: bool = false, verbose: bool = false, args: seq[string]): int =
+  installCommand(hlp, global, verbose, args)
+  QuitSuccess
+
 proc cleanCacheCommandAux*(hlp: bool = false, skipNimble: bool = false, skipArchive: bool = false): int =
   cleanCacheCommand(hlp, skipNimble, skipArchive)
   QuitSuccess
@@ -103,6 +107,7 @@ when isMainModule:
     [depsGraphCommandAux, cmdName = "depsgraph"],
     [cleanCacheCommandAux, cmdName = "cleancache"],
     [initCommandAux, cmdName = "init"],
+    [installCommandAux, cmdName = "install"],
   )
   initCli()
 
@@ -130,6 +135,9 @@ when isMainModule:
     pars.insert("--limit", p)
   
   # Flags
+  if pars.find("-G") != -1:
+    pars.delete(pars.find("-G"))
+    pars.add("--global")
   if pars.find("-j") != -1:
     pars.delete(pars.find("-j"))
     pars.add("--json")
@@ -139,6 +147,9 @@ when isMainModule:
   if pars.find("-v") != -1:
     pars.delete(pars.find("-v"))
     pars.add("--version")
+  if pars.find("-V") != -1:
+    pars.delete(pars.find("-V"))
+    pars.add("--verbose")
   if pars.find("-d") != -1:
     pars.delete(pars.find("-d"))
     pars.add("--description")
@@ -184,6 +195,8 @@ when isMainModule:
     quit(dispatchcleancache(cmdLine = pars[1..^1]))
   of "init":
     quit(dispatchinit(cmdLine = pars[1..^1]))
+  of "install", "i":
+    quit(dispatchinstall(cmdLine = pars[1..^1]))
   else:
     if pars.find("--hlp") != -1:
       quit(dispatchhelp(cmdLine = pars[1..^1]))

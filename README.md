@@ -24,7 +24,7 @@ Run `nmr <command> --help` for detailed usage.
 
 List of available commands:
 - [x] `init` - Initialize a new project
-- [ ] `install` - Install package(s) and deps
+- [x] `install|i` - Install package(s) and deps
 - [ ] `update` - Update package(s) by semver
 - [x] `upgrade|up` - Upgrade packages list to latest
 - [ ] `remove` - Remove package(s)

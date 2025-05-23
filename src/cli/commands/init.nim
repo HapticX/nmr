@@ -20,7 +20,7 @@ proc initCommand*(
 ) =
   if help:
     styledEcho "Usage: ", fgYellow, "nmr ", fgMagenta, "init", fgWhite, " [options]\n"
-    styledEcho "Create a new Nim project with nmr..\n"
+    styledEcho "Create a new Nim project with nmr.\n"
     styledEcho "Options:"
     styledEcho fgYellow, "  -A", fgWhite, ",", fgYellow, "  --author", fgWhite, "            Specify the package author"
     styledEcho fgYellow, "  -n", fgWhite, ",", fgYellow, "  --name", fgWhite, "              Specify the package name"
