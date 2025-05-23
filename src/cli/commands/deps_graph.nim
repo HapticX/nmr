@@ -36,7 +36,7 @@ proc depsGraphCommand*(help: bool = false, useCache: bool = true, packages: seq[
     styledEcho fgYellow, "Dependency Graph", fgWhite, " of ", fgYellow, packages[0]
     waitFor waitAndProgress("Fetching packages", processDep(dep, pkgs, useCache))
     if dep.isNil:
-      styledEcho fgRed, "Error: ", fgWhite, "no any .nimble file here."
+      styledEcho fgRed, "Error: ", fgWhite, "this is not a nim package."
     else:
       echo dep
   else:

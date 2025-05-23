@@ -27,7 +27,7 @@ proc installCommand*(
     styledEcho fgYellow, "  -h", fgWhite, ",", fgYellow, "  --help", fgWhite, "              Show this help\n"
     styledEcho "Examples:"
     styledEcho fgYellow, "  nmr", fgMagenta, " install ", fgRed, "norm"
-    styledEcho fgYellow, "  nmr", fgMagenta, " i ", fgRed, "happyx pixie"
+    styledEcho fgYellow, "  nmr", fgMagenta, " i ", fgRed, "happyx@#head pixie"
     return
   
   
@@ -44,27 +44,42 @@ proc installCommand*(
   let pkgs = parseJson(f.readAll())
   f.close()
 
-  var deps: seq[Dependency]
-  var pDeps: seq[ptr Dependency]
-  var futures: seq[Future[void]]
-  for i in args:
-    var
-      s = split(i, "@")
-      version = ""
-      op = ""
-    let pkg = findPackage(s[0], pkgs)
-    if s.len > 1:
-      if s[1].scanf("\"$s${vop}$s$+\"", op, version):
-        discard
-      elif s[1].scanf("$s${vop}$s$+", op, version):
-        discard
-      else:
-        version = s[1]
-    var dep = Dependency(name: pkg["name"].str, op: op, version: version)
-    if not pkg.isNil:
-      futures.add processDep(dep, pkgs, true)
-    pDeps.add addr dep
-  waitFor waitAndProgress("Fetching packages", gather(futures))
+  var
+    deps: seq[Dependency]
+    pDeps: seq[ptr Dependency]
+    futures: seq[Future[void]]
+  if args.len > 0:
+    for i in args:
+      var
+        s = split(i, "@")
+        version = ""
+        op = ""
+      let pkg = findPackage(s[0], pkgs)
+      if s.len > 1:
+        if s[1].scanf("\"$s${vop}$s$+\"", op, version):
+          discard
+        elif s[1].scanf("$s${vop}$s$+", op, version):
+          discard
+        else:
+          version = s[1]
+      var dep = Dependency(name: pkg["name"].str, op: op, version: version)
+      if not pkg.isNil:
+        futures.add processDep(dep, pkgs, true)
+      pDeps.add addr dep
+    waitFor waitAndProgress("Fetching packages", gather(futures))
+  else:
+    var dep: Dependency
+    for file in walkFiles("*"):
+      if file.endsWith(".nimble") and dep.isNil:
+        styledEcho fgYellow, "Dependency Graph", fgWhite, " of ", fgYellow, file.rsplit(".", 1)[0]
+        dep = waitFor depsGraph(file, true)
+        break
+    if not dep.isNil:
+      for d in dep.children:
+        deps.add d
+    else:
+      styledEcho fgRed, "Error: ", fgWhite, "this is not a nim package."
+      return
 
   for dep in pDeps:
     deps.add dep[]
