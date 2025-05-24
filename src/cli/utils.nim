@@ -21,6 +21,7 @@ import
   ./textutils,
   ./git_utils,
   ./async_utils,
+  ./pkg_utils,
   ./semver,
   ./types
 
@@ -28,6 +29,7 @@ import
 export
   textutils,
   async_utils,
+  pkg_utils,
   types
 
 
@@ -120,49 +122,6 @@ proc initCli*() =
   
   # fetch actual package list if it doesn't exists
   if not fileExists(packagesFile): fetchPackages()
-
-
-proc vop*(input: string; strVal: var string; start: int): int =
-  # matches exactly ``n`` digits. Matchers need to return 0 if nothing
-  # matched or otherwise the number of processed chars.
-  if start+1 < input.len and input[start..start+1] in [">=", "<=", "~=", "==", "^="]:
-    result = 2
-    strVal = input[start..start+1]
-  elif start < input.len and input[start] in {'<', '>', '@'}:
-    result = 1
-    strVal = $input[start]
-
-
-proc parseNimbleFile*(filename: string): Dependency =
-  if not fileExists(filename):
-    return nil
-
-  let (dir, name, ext) = filename.splitFile()
-  var
-    tmp = ""
-    version = ""
-    srcDir = ""
-    f = open(filename, fmRead)
-  let data = f.readAll()
-  f.close()
-  
-  result = Dependency(children: @[], name: name, version: version, parent: nil)
-
-  for i in data.split("\n"):
-    if i.scanf("srcDir$s=$s\"$*\"", srcDir):
-      result.srcDir = srcDir
-    elif i.scanf("version$s=$s\"$*\"", version):
-      result.version = version
-    else:
-      var
-        pkg, op, version: string
-      if i.scanf("requires$s\"$w$s${vop}$s$*\"", pkg, op, version):
-        discard
-      elif i.scanf("requires$s\"$*\"", pkg):
-        op = ""
-        version = ""
-      if pkg.len > 0 and version.len > 0 and pkg.toLower() != "nim":
-        result.children.add Dependency(parent: result, children: @[], name: pkg, op: op, version: version)
 
 
 proc findPackage*(name: string, packages: JsonNode): JsonNode =

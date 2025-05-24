@@ -13,6 +13,8 @@ type
     srcDir*: string
     url*: string
     gitRef*: tuple[hash, name: string]
+    tasks*: seq[tuple[command, name: string]]
+    features*: seq[string]
   QrAlign* = enum
     qraLeft,
     qraCenter,

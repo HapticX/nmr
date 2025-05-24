@@ -33,6 +33,7 @@ List of available commands:
 - [ ] `publish` - Publish a package
 - [x] `search|s` - Search for packages
 - [x] `info` - Shows info about package
+- [ ] `<taskName>` - Executes specified task
 
 
 ## How It Works
