@@ -9,3 +9,5 @@ nim_deps/
 .cache/
 
 test_*/
+nimble.develop
+nimble.paths

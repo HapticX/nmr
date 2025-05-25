@@ -162,18 +162,15 @@ proc updateConfigPaths*(
   ## If a dep has no matching line, we insert it after the header comments.
   for cfgPath in configFiles:
     let cfgDir = parentDir(cfgPath)
-    var relDeps = relativePath(depsRoot, cfgDir)
+    var
+      relDeps = relativePath(depsRoot, cfgDir)
+      depsData = ""
     relDeps = relDeps.replace(DirSep, '/')
 
     # read and split
-    let original = readFile(cfgPath).splitLines()
-    var lines = original[0..^1]
-
-    # find insertion index (after leading comment lines)
-    var insertAt = 0
-    while insertAt < lines.len and lines[insertAt].strip().startsWith("#"):
-      insertAt.inc
-
+    let
+      original = readFile(cfgPath)
+      configPaths = cfgDir / "nimble.paths"
     # process each dependency
     for dep in deps:
       # build dirName and fullPath
@@ -193,22 +190,15 @@ proc updateConfigPaths*(
       if dep.srcDir.len > 0:
         fullPath.add "/" & dep.srcDir
 
-      let desiredLine = "--path:\"" & fullPath & "\""
-      var replaced = false
+      depsData &= "--path:\"" & fullPath & "\"\n"
 
-      # replace any existing line for this dep
-      for i in 0..<lines.len:
-        if lines[i].startsWith("--path:\"") and lines[i].contains(dirName):
-          lines[i] = desiredLine
-          replaced = true
+    if "include \"nimble.paths\"" notin original:
+      writeFile(cfgPath, original & """
+when withDir(thisDir(), system.fileExists("nimble.paths")):
+  include "nimble.paths"
+""")
 
-      # if none replaced, insert a new line
-      if not replaced:
-        lines.insert(desiredLine, insertAt)
-        insertAt.inc
-
-    # write back
-    writeFile(cfgPath, lines.join("\n"))
+    writeFile(configPaths, depsData)
 
 
 proc processDep*(dep: Dependency, packages: JsonNode, useCache: bool = true) {.async.} =

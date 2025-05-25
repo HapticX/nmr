@@ -107,8 +107,9 @@ proc installCommand*(
     var tmp: string
     if i.scanf("$*config.nims", tmp):
       configFiles.add i
-    elif i.scanf("$*.nim.cfg", tmp):
-      configFiles.add i
+    # When is not supporting
+    # elif i.scanf("$*.nim.cfg", tmp):
+    #   configFiles.add i
   
   updateConfigPaths(configFiles, iDeps, getCurrentDir() / "deps")
 

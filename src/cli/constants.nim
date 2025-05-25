@@ -11,6 +11,8 @@ const
 .cache/
 deps/
 nim_deps/
+nimble.paths
+nimble.develop
 """
   nimbleTemplate* = """# Package
 verion = "{pkgVersion}"
@@ -35,7 +37,10 @@ suite "Main":
   test "sum of two":
     assert sum(2, 3) == 5
 """
-  testConfigFileTemplate* = """--path:"../{srcDir}"
+  testConfigFileTemplate* = """when withDir(thisDir(), system.fileExists("nimble.paths")):
+  include "nimble.paths"
+
+--path:"../{srcDir}"
 """
   editorConfigTemplate* = """root = true
 
