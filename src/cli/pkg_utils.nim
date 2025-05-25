@@ -8,6 +8,8 @@ import
   ./types
 
 
+proc parseNimble(node: PNode, dep: Dependency, featureList: seq[string] = @[])
+
 
 proc vop*(input: string; strVal: var string; start: int): int =
   # matches exactly ``n`` digits. Matchers need to return 0 if nothing
@@ -18,6 +20,44 @@ proc vop*(input: string; strVal: var string; start: int): int =
   elif start < input.len and input[start] in {'<', '>', '@'}:
     result = 1
     strVal = $input[start]
+
+
+proc pkgName*(input: string; strVal: var string; start: int): int =
+  ## Match a package spec starting at `start`. Recognizes:
+  ##  - plain names (e.g. jester), stopping before "#" if it's a version
+  ##  - git URLs (with "://"), keeping any "#" in the URL
+  ##  - stops at whitespace or before a version‐operator (vop)
+  ##
+  ## Returns length consumed, or 0 if no match.
+
+  strVal = ""
+  if start < 0 or start >= input.len:
+    return 0
+
+  var i = start
+  while i < input.len:
+    let c = input[i]
+    # stop on whitespace
+    if c in Whitespace:
+      break
+
+    # stop on version-operator
+    var op = ""
+    if vop(input, op, i) > 0:
+      break
+
+    # stop on '#' only if this isn't a URL
+    if c == '#':
+      let prefix = input[start ..< i]
+      if not prefix.contains("://"):
+        break
+    inc(i)
+
+  if i <= start:
+    return 0
+
+  strVal = input[start ..< i]
+  result = i
 
 
 proc definedName(node: PNode): string =
@@ -38,11 +78,32 @@ proc evalWhen(argument: string): bool =
   else: false
 
 
-proc parseNimble(node: PNode, dep: Dependency) =
+proc parseWhenElifBranch(node: PNode, dep: Dependency, featureList: seq[string] = @[]): bool =
+  if node.kind == nkElifBranch:
+    let (cond, body) = (node[0], node[1])
+    if cond.kind == nkPrefix and cond[0].kind == nkIdent and cond[0].ident.s == "not":
+      let name = definedName cond[1]
+      if name.len > 0:
+        if not evalWhen(name):
+          parseNimble(body, dep, featureList)
+          return true
+    elif definedName(cond).len > 0:
+      if evalWhen(definedName(cond)):
+        parseNimble(body, dep, featureList)
+        return true
+    elif cond.kind == nkInfix and cond[0].kind == nkIdent and cond[0].ident.s == "or":
+      let (right, left) = (definedName(cond[1]), definedName(cond[2]))
+      if left.len > 0 or right.len > 0:
+        if evalWhen(left) or evalWhen(right):
+          parseNimble(body, dep, featureList)
+          return true
+
+
+proc parseNimble(node: PNode, dep: Dependency, featureList: seq[string] = @[]) =
   case node.kind
   of nkStmtList, nkStmtListExpr:
     for n in node:
-      parseNimble(n, dep)
+      parseNimble(n, dep, featureList)
   of nkCallKinds:
     if node[0].kind == nkIdent:
       case node[0].ident.s
@@ -53,14 +114,10 @@ proc parseNimble(node: PNode, dep: Dependency) =
             ch = ch.lastSon
           if ch.kind in nkStrKinds:
             var
-              pkg, op, version: string
-            if ch.strVal.scanf("$w$s${vop}$s$*", pkg, op, version):
-              discard
-            elif ch.strVal.scanf("$*", pkg):
-              op = ""
-              version = ""
+              pkg, version: string
+            if ch.strVal.scanf("${pkgName}$*", pkg, version): discard
             if pkg.len > 0 and pkg.toLower() != "nim":
-              dep.children.add Dependency(parent: dep, children: @[], name: pkg, op: op, version: version)
+              dep.children.add Dependency(parent: dep, children: @[], name: pkg, version: version)
       of "task":
         if node.len >= 3 and node[1].kind == nkIdent and node[2].kind in nkStrKinds:
           dep.tasks.add (command: node[1].ident.s, name: node[2].strVal)
@@ -79,26 +136,18 @@ proc parseNimble(node: PNode, dep: Dependency) =
       else:
         discard
   of nkWhenStmt:
-    if node[0].kind == nkElifBranch:
-      let (cond, body) = (node[0][0], node[0][1])
-      if cond.kind == nkPrefix and cond[0].kind == nkIdent and cond[0].ident.s == "not":
-        let name = definedName cond[1]
-        if name.len > 0:
-          if not evalWhen(name):
-            parseNimble(body, dep)
-      elif definedName(cond).len > 0:
-        if evalWhen(definedName(cond)):
-          parseNimble(body, dep)
-      elif cond.kind == nkInfix and cond[0].kind == nkIdent and cond[0].ident.s == "or":
-        let (right, left) = (definedName(cond[1]), definedName(cond[2]))
-        if left.len > 0 or right.len > 0:
-          if evalWhen(left) or evalWhen(right):
-            parseNimble(body, dep)
+    var wasParsed = false
+    for branch in node:
+      if parseWhenElifBranch(branch, dep):
+        wasParsed = true
+        break
+    if not wasParsed and node[^1].kind == nkElse:
+      parseNimble(node[^1][0], dep, featureList)
   else:
     discard
 
 
-proc parseNimbleFile*(filename: string): Dependency =
+proc parseNimbleFile*(filename: string, featureList: seq[string] = @[]): Dependency =
   if not fileExists(filename):
     return nil
 
@@ -121,4 +170,4 @@ proc parseNimbleFile*(filename: string): Dependency =
   let fileIdx = fileInfoIdx(conf, AbsoluteFile filename)
   if setupParser(parser, fileIdx, newIdentCache(), conf):
     let parsed = parseAll(parser)
-    parseNimble(parsed, result)
+    parseNimble(parsed, result, featureList)

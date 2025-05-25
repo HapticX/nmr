@@ -9,7 +9,6 @@ type
     parent*: Dependency
     children*: seq[Dependency]
     name*, version*: string
-    op*: string
     srcDir*: string
     url*: string
     gitRef*: tuple[hash, name: string]
@@ -29,7 +28,7 @@ proc pretty*(
 ): string =
   result = newStringOfCap(128)
   let
-    key = fmt"{dep.name} {dep.op} {dep.version}"
+    key = fmt"{dep.name} {dep.version}"
     branch = if prefix.len > 0:
                if isLast: "└─ " else: "├─ "
              else: ""
@@ -40,19 +39,6 @@ proc pretty*(
     for i, child in dep.children:
       let lastChild = i == dep.children.len - 1
       result.add pretty(child, childPrefix, lastChild, seen)
-
-
-proc extractPaths*(dep: Dependency): seq[string] =
-  ## Recursively collect "deps/{name[-version]}/{srcDir}" for `dep` and all its children.
-  result = @[]
-  let dirName = if dep.version.len > 0:
-    fmt"{dep.name}-{dep.version}"
-  else:
-    dep.name
-  result.add fmt"deps/{dirName}/{dep.srcDir}"
-  for child in dep.children:
-    for i in extractPaths(child):
-      result.add i
 
 
 proc toInstallOrder*(root: Dependency): seq[Dependency] =

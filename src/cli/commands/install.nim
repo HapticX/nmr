@@ -46,7 +46,6 @@ proc installCommand*(
 
   var
     deps: seq[Dependency]
-    pDeps: seq[ptr Dependency]
     futures: seq[Future[void]]
   if args.len > 0:
     for i in args:
@@ -62,10 +61,10 @@ proc installCommand*(
           discard
         else:
           version = s[1]
-      var dep = Dependency(name: pkg["name"].str, op: op, version: version)
+      var dep = Dependency(name: pkg["name"].str, version: version)
       if not pkg.isNil:
         futures.add processDep(dep, pkgs, true)
-      pDeps.add addr dep
+      deps.add dep
     waitFor waitAndProgress("Fetching packages", gather(futures))
   else:
     var dep: Dependency
@@ -81,9 +80,6 @@ proc installCommand*(
       styledEcho fgRed, "Error: ", fgWhite, "this is not a nim package."
       return
 
-  for dep in pDeps:
-    deps.add dep[]
-
   futures = @[]
   for dep in deps:
     futures.add downloadDeps(dep, global)
@@ -98,9 +94,9 @@ proc installCommand*(
     if verbose:
       styledEcho fgYellow, "   Info: ", fgWhite, "package ", fgYellow, dep.name, "-", dep.gitRef.name.split("/")[^1], fgWhite, " is installing ..."
     let
-      depName = dep.name & "-" & dep.gitRef.name.split("/")[^1] & "-" & dep.gitRef.hash
-      archiveFilename = ".cache/nmr/graph/" & depName & ".zip"
-      depDirectory = "deps/" & depName
+      depName = dep.name.normalizedName & "-" & dep.gitRef.name.split("/")[^1] & "-" & dep.gitRef.hash
+      archiveFilename = ".cache/nmr/graph/" & depName.normalizedName & ".zip"
+      depDirectory = "deps/" & depName.normalizedName
     if not dirExists(depDirectory):
       extractAll(archiveFilename, depDirectory)
   

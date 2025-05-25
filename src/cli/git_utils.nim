@@ -7,8 +7,12 @@ import
 
 proc getRefs*(repo: string, tags: bool = true, heads: bool = true, pulls: bool = true): Future[seq[tuple[hash, name: string]]] {.async.} =
   let httpClient = newAsyncHttpClient()
-  var res: seq[tuple[hash, name: string]] = @[]
-  let response = await httpClient.get(repo & (if repo.endsWith".git": "" else: ".git") & "/info/refs?service=git-upload-pack")
+  var
+    res: seq[tuple[hash, name: string]] = @[]
+    url = repo
+  url.removeSuffix("/")
+  url.removeSuffix(".git")
+  let response = await httpClient.get(url & ".git/info/refs?service=git-upload-pack")
   if response.code == Http200:
     let output = await response.body()
     for i in output.splitLines:

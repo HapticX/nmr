@@ -1,20 +1,26 @@
-import
-  std/strutils
+import std/[strscans, strutils, sequtils]
 
+type
+  ConstraintKind* = enum
+    ckGt, ckGte, ckLt, ckLte, ckEq
+
+  Constraint* = object
+    kind*: ConstraintKind
+    ver*: seq[int]    # [major, minor, patch]
 
 proc parseVersion*(v: string): seq[int] =
   var s = v.strip()
   if s.startsWith("refs/tags/"):
-    s = s.split('/')[^1]
-  var tmpS = s
-  s = ""
-  for i in tmpS:
-    if i in {'0'..'9', '.'}:
-      s &= i
-  # strip leading "v"
+    s = s.split("/")[^1]
   if s.startsWith("v"):
-    s = s[1 .. ^1]
-  let parts = s.split('.')
+    s = s[1..^1]
+  var clean = newStringOfCap(s.len)
+  for c in s:
+    if c.isDigit or c == '.':
+      clean.add c
+  let parts = clean.split('.').filterIt(it.len > 0)
+  if parts.len == 0:
+    return @[0]
   result.setLen(parts.len)
   for i, p in parts:
     result[i] = p.parseInt()
@@ -28,110 +34,166 @@ proc cmpVersion*(a, b: seq[int]): int =
     if ai > bi: return 1
   return 0
 
-proc tagParts(tn: string): tuple[rf: string, pv: seq[int]] =
-  let name = if tn.startsWith("refs/tags/"): tn.split('/')[^1] else: tn
-  (tn, parseVersion(name))
+proc toVerSeq*(vstr: string): seq[int] =
+  var v = parseVersion(vstr)
+  while v.len < 3: v.add 0
+  if v.len > 3: v.setLen 3
+  result = v
 
+proc parseRange*(rangeStr: string): seq[seq[Constraint]] =
+  result = @[]
+  for orPart in rangeStr.split("||"):
+    let p0 = orPart.strip()
+    if p0.len == 0: continue
+    var constraints: seq[Constraint] = @[]
 
-proc findTag*(refs: seq[tuple[hash, name: string]], op, version: string): tuple[hash, name: string] =
-  ## Select a git ref (tag or head) from `refs` according to `op` and `version`.
-  ## If both `op` and `version` are empty, pick the highest‐semver tag.
-
-  # split into tags and heads
-  var tags, heads: seq[tuple[hash, name: string]]
-  for r in refs:
-    if r.name.startsWith("refs/tags/"): tags.add r
-    elif r.name.startsWith("refs/heads/"): heads.add r
-
-  # 1) no op & no version: pick highest semver tag
-  if op.len == 0 and version.len == 0:
-    if tags.len > 0:
-      # find max by semver
-      var best = tags[0]
-      var bestV = tagParts(best.name).pv
-      for t in tags[1..^1]:
-        let (_, tv) = tagParts(t.name)
-        if cmpVersion(tv, bestV) == 1:
-          best = t
-          bestV = tv
-      return best
+    let rangeData = p0.split("-")
+    if rangeData.len == 2:
+      let
+        low = rangeData[0].strip()
+        high = rangeData[1].strip()
+      constraints.add Constraint(kind: ckGte, ver: toVerSeq(low))
+      constraints.add Constraint(kind: ckLte, ver: toVerSeq(high))
     else:
+      var toks = p0.replace("&", " ").replace("  ", " ").split(' ').filterIt(it.len > 0)
+      var idx = 0
+      while idx < toks.len:
+        let t = toks[idx].strip()
+        var opStr, verstr: string
+
+        if t in @["<", ">", "<=", ">=", "==", "~=", "^="]:
+          opStr = t
+          if idx+1 < toks.len:
+            verstr = toks[idx+1].strip()
+            inc idx
+          else:
+            break
+        else:
+          # combined operator+version or plain version
+          if t.startsWith(">="):
+            opStr = ">="; verstr = t.substr(2)
+          elif t.startsWith("<="):
+            opStr = "<="; verstr = t.substr(2)
+          elif t.startsWith("^="):
+            opStr = "^="; verstr = t.substr(2)
+          elif t.startsWith("~="):
+            opStr = "~="; verstr = t.substr(2)
+          elif t.startsWith(">"):
+            opStr = ">";  verstr = t.substr(1)
+          elif t.startsWith("<"):
+            opStr = "<";  verstr = t.substr(1)
+          elif t.startsWith("=="):
+            opStr = "=="; verstr = t.substr(2)
+          else:
+            opStr = "=="; verstr = t
+        # wildcard?
+        if verstr.find('x') >= 0 or verstr.find('*') >= 0:
+          let comps = verstr.split('.')
+          var lower: seq[int] = @[]
+          for c in comps:
+            if c.toLowerAscii() in @["x","*"]: lower.add 0
+            else: lower.add c.parseInt()
+          while lower.len < 3: lower.add 0
+          var upper: seq[int] = if lower.len > 0: lower[0..^1] else: @[]
+          for i2, c in comps:
+            if c.toLowerAscii() in @["x","*"] and i2 < upper.len:
+              upper[i2] = upper[i2] + 1
+              for j in (i2+1)..<upper.len: upper[j] = 0
+              break
+          constraints.add Constraint(kind: ckGte, ver: lower)
+          constraints.add Constraint(kind: ckLt,  ver: upper)
+        else:
+          let vseq = toVerSeq(verstr)
+          case opStr
+          of ">":  constraints.add Constraint(kind: ckGt,  ver: vseq)
+          of ">=": constraints.add Constraint(kind: ckGte, ver: vseq)
+          of "<":  constraints.add Constraint(kind: ckLt,  ver: vseq)
+          of "<=": constraints.add Constraint(kind: ckLte, ver: vseq)
+          of "==": constraints.add Constraint(kind: ckEq,  ver: vseq)
+          of "~=":
+            var bump = if vseq.len > 0: vseq[0..^1] else: @[]
+            bump[1] = bump[1] + 1
+            constraints.add Constraint(kind: ckGte, ver: vseq)
+            constraints.add Constraint(kind: ckLt,  ver: bump)
+          of "^=":
+            var bound: seq[int]
+            if vseq[0] != 0:
+              bound = @[vseq[0]+1, 0,0]
+            elif vseq[1] != 0:
+              bound = @[0, vseq[1]+1, 0]
+            else:
+              bound = @[0,0, vseq[2]+1]
+            constraints.add Constraint(kind: ckGte, ver: vseq)
+            constraints.add Constraint(kind: ckLt,  ver: bound)
+          else:
+            discard
+        inc idx
+    result.add constraints
+  return
+
+proc satisfies*(v: seq[int], cons: seq[Constraint]): bool =
+  for c in cons:
+    let cmp = cmpVersion(v, c.ver)
+    case c.kind
+    of ckGt:
+      if cmp <= 0: return false
+    of ckGte:
+      if cmp <  0: return false
+    of ckLt:
+      if cmp >= 0: return false
+    of ckLte:
+      if cmp >  0: return false
+    of ckEq:
+      if cmp != 0: return false
+  return true
+
+proc latestTag*(refs: seq[tuple[hash, name: string]]): tuple[hash, name: string] =
+  let tags = refs.filterIt(it.name.startsWith("refs/tags/"))
+  if tags.len > 0:
+    result = tags[0]
+    var bestV = toVerSeq(result.name)
+    for t in tags[1..^1]:
+      let tv = toVerSeq(t.name)
+      if cmpVersion(tv, bestV) == 1:
+        result = t; bestV = tv
+  else:
+    result = refs[0]
+
+proc findTag*(refs: seq[tuple[hash, name: string]], version: string): tuple[hash, name: string] =
+  let ver = version.strip()
+  if ver.len == 0:
+    return refs.latestTag()
+
+  if ver.contains('#'):
+    let parts = ver.split('#', 1)
+    let suffix = parts[1].strip()
+    let tail   = if suffix.contains(' '): suffix.split(' ', 1)[1] else: ""
+    if suffix.startsWith("head"):
+      if tail.len > 0:
+        # semver tail after head
+        let ranges = parseRange(tail)
+        var cands: seq[tuple[hash, name: string]] = @[]
+        for r in refs:
+          if r.name.startsWith("refs/tags/"):
+            let vseq = toVerSeq(r.name)
+            if ranges.anyIt(vseq.satisfies(it)):
+              cands.add r
+        if cands.len > 0:
+          return cands.latestTag()
       return refs[0]
-
-  # 2) HEAD shortcut
-  if version[0] == '#' and version[1..^1].toLowerAscii().strip() == "head":
-    return refs[0]
-  elif version.toLowerAscii().strip() == "head":
-    return refs[0]
-
-  # 3) direct "#hash" syntax
-  let libhash = version.split("#")
-  if libhash.len == 2:
-    return (hash: "", name: libhash[1])
-
-  # 4) semver operator on tags
-  if op.len > 0 and version.len > 0:
-    let pv = parseVersion(version)
-    var candidates: seq[tuple[hash, name: string]]
-
-    case op
-    of ">":
-      for t in tags:
-        if cmpVersion(tagParts(t.name).pv, pv) == 1: candidates.add t
-    of "<":
-      for t in tags:
-        if cmpVersion(tagParts(t.name).pv, pv) == -1: candidates.add t
-    of ">=":
-      for t in tags:
-        if cmpVersion(tagParts(t.name).pv, pv) >= 0: candidates.add t
-    of "<=":
-      for t in tags:
-        if cmpVersion(tagParts(t.name).pv, pv) <= 0: candidates.add t
-    of "~=":
-      var bump = pv
-      if bump.len >= 2: bump[1] += 1 else: bump[0] += 1
-      for t in tags:
-        let tv = tagParts(t.name).pv
-        if cmpVersion(tv, pv) >= 0 and cmpVersion(tv, bump) < 0:
-          candidates.add t
-    of "^=":
-      var bound: seq[int]
-      if pv.len >= 1 and pv[0] != 0:
-        bound = @[pv[0] + 1]
-      elif pv.len >= 2 and pv[1] != 0:
-        bound = @[0, pv[1] + 1]
-      elif pv.len >= 3:
-        bound = @[0, 0, pv[2] + 1]
-      else:
-        bound = @[pv[0] + 1]
-      for t in tags:
-        let tv = tagParts(t.name).pv
-        if cmpVersion(tv, pv) >= 0 and cmpVersion(tv, bound) < 0:
-          candidates.add t
-    of "==":
-      let want = parseVersion(version).join(".")
-      for t in tags:
-        let nm = if t.name.startsWith("refs/tags/"): t.name.split('/')[^1] else: t.name
-        if nm == want:
-          return t
     else:
-      discard
-
-    if candidates.len > 0:
-      var best = candidates[0]
-      var bestV = tagParts(best.name).pv
-      for c in candidates[1..^1]:
-        let cv = tagParts(c.name).pv
-        if cmpVersion(cv, bestV) == 1:
-          best = c
-          bestV = cv
-      return best
-    return refs[0]
-
-  # 5) branch match
-  for h in heads:
-    if h.name.endsWith("/" & version):
-      return h
-
-  # fallback
+      return (hash: "", name: suffix)
+  
+  let ranges = parseRange(ver)
+  var cands: seq[tuple[hash, name: string]] = @[]
+  for r in refs:
+    if r.name.startsWith("refs/tags/"):
+      let vseq = toVerSeq(r.name)
+      if ranges.anyIt(vseq.satisfies(it)):
+        cands.add r
+  if cands.len > 0:
+    return cands.latestTag()
+  for r in refs:
+    if r.name.startsWith("refs/heads/") and r.name.endsWith("/" & ver):
+      return r
   return refs[0]

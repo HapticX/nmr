@@ -46,6 +46,23 @@ proc createFile*(filename, content: string) =
   f.close()
 
 
+proc normalizedName*(name: string): string =
+  if "github.com" in name:
+    return name.split("github.com")[1].split("/")[1].split("#")[0]
+  result = name.replace(":", "-")
+    .replace("#", "-")
+    .replace("/", "-")
+    .replace("\\", "-")
+    .replace("?", "-")
+    .replace("*", "-")
+    .replace("@", "-")
+    .replace("$", "-")
+    .replace("<", "-")
+    .replace(">", "-")
+    .replace("|", "-")
+    .replace("'", "-")
+
+
 proc printTerminalBeaty*(
     self: DrawedQRCode,
     clr: ForegroundColor = fgYellow,
@@ -161,7 +178,7 @@ proc updateConfigPaths*(
     for dep in deps:
       # build dirName and fullPath
       let tagPart = dep.gitRef.name.split('/')[^1]
-      let dirName = fmt"{dep.name}-{tagPart}-{dep.gitRef.hash}"
+      let dirName = fmt"{dep.name.normalizedName}-{tagPart}-{dep.gitRef.hash}"
       var fullPath = fmt"{relDeps}/{dirName}"
       # if there's exactly one subdir under depsRoot/dirName, use it
       let dr = depsRoot / dirName
@@ -196,8 +213,18 @@ proc updateConfigPaths*(
 
 proc processDep*(dep: Dependency, packages: JsonNode, useCache: bool = true) {.async.} =
   var pkg = findPackage(dep.name, packages)
-  if pkg.isNil:
+
+  if pkg.isNil and not dep.name.startsWith("https://github.com"):
     return
+  elif dep.name.startsWith("https://github.com"):
+    pkg = %*{
+      "name": dep.name.normalizedName,
+      "url": dep.name.split('#')[0],
+      "tags": [],
+      "description": "",
+      "method": "git"
+    }
+
   var client = newAsyncHttpClient()
   if "method" in pkg:
     case pkg["method"].str
@@ -205,16 +232,17 @@ proc processDep*(dep: Dependency, packages: JsonNode, useCache: bool = true) {.a
       discard
     of "git":
       var ghPath = pkg["url"].str.split("github.com/")[1]
+      ghPath.removeSuffix("/")
       ghPath.removeSuffix(".git")
       var gitRef: tuple[hash, name: string]
       if ghPath notin repoRefs:
         repoRefs[ghPath] = await getRefs(pkg["url"].str)
-      gitRef = repoRefs[ghPath].findTag(dep.op, dep.version)
+      gitRef = repoRefs[ghPath].findTag(dep.version)
       dep.gitRef = gitRef
       dep.url = pkg["url"].str
       let
         url = "https://raw.githubusercontent.com/" & ghPath & "/" & gitRef.name & "/" & pkg["name"].str & ".nimble"
-        filename = ".cache/nmr/graph/" & dep.name & "-" & gitRef.name.split("/")[^1] & "-" & gitRef.hash & ".nimble"
+        filename = ".cache/nmr/graph/" & dep.name.normalizedName & "-" & gitRef.name.split("/")[^1] & "-" & gitRef.hash & ".nimble"
       if not useCache or not fileExists(filename):
         var data = await client.get(url)
         if data.code == Http200:
@@ -247,7 +275,6 @@ proc processDep*(dep: Dependency, packages: JsonNode, useCache: bool = true) {.a
         return
       
       dep.version = currentDep.version
-      dep.op = currentDep.op
       dep.srcDir = currentDep.srcDir
       
       var childFuts: seq[Future[void]] = @[]
@@ -261,10 +288,11 @@ proc downloadDeps*(dep: Dependency, global: bool = false) {.async.} =
   var
     repoUrl = dep.url
     client = newAsyncHttpClient()
+  repoUrl.removeSuffix("/")
   repoUrl.removeSuffix(".git")
   let
-    urlZip = repoUrl & "/archive/" & dep.gitRef.name & "/" & dep.name & ".zip"
-    filenameZip = ".cache/nmr/graph/" & dep.name & "-" & dep.gitRef.name.split("/")[^1] & "-" & dep.gitRef.hash & ".zip"
+    urlZip = repoUrl & "/archive/" & dep.gitRef.name & "/" & dep.name.normalizedName & ".zip"
+    filenameZip = ".cache/nmr/graph/" & dep.name.normalizedName & "-" & dep.gitRef.name.split("/")[^1] & "-" & dep.gitRef.hash & ".zip"
   if fileExists(filenameZip):
     return
   await client.downloadFile(urlZip, filenameZip)
