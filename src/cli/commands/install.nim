@@ -31,10 +31,13 @@ proc installCommand*(
     return
   
   
-  var package: Dependency
+  var
+    package: Dependency
+    nimbleFile = ""
 
   for file in walkFiles("*"):
     if file.endsWith(".nimble") and package.isNil:
+      nimbleFile = file
       package = parseNimbleFile(file)
   
   if package.isNil:
@@ -48,6 +51,14 @@ proc installCommand*(
     deps: seq[Dependency]
     futures: seq[Future[void]]
   if args.len > 0:
+    var insertIndex = -1
+    var nimbleData: seq[string] = @[]
+    if nimbleFile.len > 0:
+      nimbleData = readFile(nimbleFile).splitLines
+      for i, line in nimbleData.pairs():
+        if line.startsWith("requires"):
+          insertIndex = i+1
+          break
     for i in args:
       var
         s = split(i, "@")
@@ -62,9 +73,24 @@ proc installCommand*(
         else:
           version = s[1]
       var dep = Dependency(name: pkg["name"].str, version: version)
+
       if not pkg.isNil:
+        # Update .nimble file requires content
+        if nimbleData.len > 0 and not package.isNil:
+          var canInsert = true
+          for d in package.children:
+            if d.name == dep.name:
+              canInsert = false
+              break
+          if canInsert and insertIndex >= 0:
+            if s.len > 1:
+              nimbleData.insert("requires \"" & s[0] & " " & s[1] & "\"", insertIndex)
+            else:
+              nimbleData.insert("requires \"" & s[0] & "\"", insertIndex)
         futures.add processDep(dep, pkgs, true)
-      deps.add dep
+        deps.add dep
+    if nimbleData.len > 0 and not package.isNil:
+      writeFile(nimbleFile, nimbleData.join("\n"))
     waitFor waitAndProgress("Fetching packages", gather(futures))
   else:
     var dep: Dependency

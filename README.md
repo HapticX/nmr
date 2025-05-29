@@ -39,6 +39,6 @@ List of available commands:
 ## How It Works
 `nmr` keeps all your dependencies locally in one folder - `deps`.
 
-When you install any libraries via `nmr`, it finds any `FILENAME.nim.cfg` and `config.nims` inside your project and injects into these config files `--path:"..."` lines for dependencies work.
+When you install any libraries via `nmr`, it finds any `config.nims` inside your project and creates `nimble.paths` into these folders with `--path:"..."` lines for dependencies work.
 
 Also `nmr` creates `.cache` folder inside your project to keep all cached dependencies to use it in `deps-graph` and `install` commands.

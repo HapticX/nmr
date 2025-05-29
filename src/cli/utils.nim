@@ -201,6 +201,10 @@ when withDir(thisDir(), system.fileExists("nimble.paths")):
     writeFile(configPaths, depsData)
 
 
+proc lockDeps*(dep: Dependency, node: JsonNode) =
+  discard
+
+
 proc processDep*(dep: Dependency, packages: JsonNode, useCache: bool = true) {.async.} =
   var pkg = findPackage(dep.name, packages)
 

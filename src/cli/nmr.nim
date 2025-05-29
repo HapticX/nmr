@@ -17,9 +17,11 @@ proc helpCommandAux*(): int =
   helpCommand()
   QuitSuccess
 
+
 proc upgradeCommandAux*(hlp: bool = false): int =
   upgradeCommand(hlp)
   QuitSuccess
+
 
 proc searchCommandAux*(hlp: bool = false, limit: int = 10, json: bool = false, args: seq[string]): int =
   if args.len == 0:
@@ -29,21 +31,26 @@ proc searchCommandAux*(hlp: bool = false, limit: int = 10, json: bool = false, a
   searchCommand(hlp, limit, json, args)
   QuitSuccess
 
+
 proc infoCommandAux*(args: seq[string]): int =
   infoCommand(args)
   QuitSuccess
+
 
 proc depsGraphCommandAux*(hlp: bool = false, noCache: bool = false, args: seq[string]): int =
   depsGraphCommand(hlp, not noCache, args)
   QuitSuccess
 
+
 proc installCommandAux*(hlp: bool = false, global: bool = false, verbose: bool = false, args: seq[string]): int =
   installCommand(hlp, global, verbose, args)
   QuitSuccess
 
+
 proc cleanCacheCommandAux*(hlp: bool = false, skipNimble: bool = false, skipArchive: bool = false): int =
   cleanCacheCommand(hlp, skipNimble, skipArchive)
   QuitSuccess
+
 
 proc initCommandAux*(
     hlp: bool = false,
@@ -99,6 +106,8 @@ proc mainMessage*() =
 
 
 when isMainModule:
+  clCfg.opChars = {}
+  clCfg.sepChars = {}
   dispatchMultiGen(
     [helpCommandAux, cmdName = "help"],
     [upgradeCommandAux, cmdName = "upgrade"],

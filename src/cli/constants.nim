@@ -13,9 +13,10 @@ deps/
 nim_deps/
 nimble.paths
 nimble.develop
+nmr.lock
 """
   nimbleTemplate* = """# Package
-verion = "{pkgVersion}"
+version = "{pkgVersion}"
 author = "{pkgAuthor}"
 description = "{pkgDescription}"
 license = "{pkgLicense}"
