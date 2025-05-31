@@ -153,6 +153,9 @@ when isMainModule:
   if pars.find("-n") != -1:
     pars.delete(pars.find("-n"))
     pars.add("--name")
+  if pars.find("-G") != -1:
+    pars.delete(pars.find("-G"))
+    pars.add("--global")
   if pars.find("-v") != -1:
     pars.delete(pars.find("-v"))
     pars.add("--version")

@@ -5,6 +5,7 @@ import
   std/strutils,
   std/terminal,
   std/unicode,
+  std/osproc,
   std/json,
   std/os,
   zippy/ziparchives,
@@ -24,7 +25,8 @@ proc installCommand*(
     styledEcho "Aliases:"
     styledEcho fgYellow, "  i \n"
     styledEcho "Options:"
-    styledEcho fgYellow, "  -h", fgWhite, ",", fgYellow, "  --help", fgWhite, "              Show this help\n"
+    styledEcho fgYellow, "  -h", fgWhite, ",", fgYellow, "  --help", fgWhite, "              Show this help"
+    styledEcho fgYellow, "  -G", fgWhite, ",", fgYellow, "  --global", fgWhite, "            Install package globally\n"
     styledEcho "Examples:"
     styledEcho fgYellow, "  nmr", fgMagenta, " install ", fgRed, "norm"
     styledEcho fgYellow, "  nmr", fgMagenta, " i ", fgRed, "happyx@#head pixie"
@@ -75,23 +77,30 @@ proc installCommand*(
       var dep = Dependency(name: pkg["name"].str, version: version)
 
       if not pkg.isNil:
+        futures.add processDep(dep, pkgs, true)
+        deps.add dep
+    
+    waitFor waitAndProgress("Fetching packages", gather(futures))
+
+    for i in args:
+      var
+        s = split(i, "@")
+        version = ""
+        op = ""
+      let pkg = findPackage(s[0], pkgs)
+      for dep in deps:
         # Update .nimble file requires content
-        if nimbleData.len > 0 and not package.isNil:
+        if not pkg.isNil and dep.name.normalizedName == s[0] and nimbleData.len > 0 and not package.isNil:
           var canInsert = true
           for d in package.children:
             if d.name == dep.name:
               canInsert = false
               break
           if canInsert and insertIndex >= 0:
-            if s.len > 1:
-              nimbleData.insert("requires \"" & s[0] & " " & s[1] & "\"", insertIndex)
-            else:
-              nimbleData.insert("requires \"" & s[0] & "\"", insertIndex)
-        futures.add processDep(dep, pkgs, true)
-        deps.add dep
-    if nimbleData.len > 0 and not package.isNil:
-      writeFile(nimbleFile, nimbleData.join("\n"))
-    waitFor waitAndProgress("Fetching packages", gather(futures))
+            nimbleData.insert("requires \"" & s[0] & " >= " & dep.version & "\"", insertIndex)
+    if not global:
+      if nimbleData.len > 0 and not package.isNil:
+        writeFile(nimbleFile, nimbleData.join("\n"))
   else:
     var dep: Dependency
     for file in walkFiles("*"):
@@ -121,22 +130,51 @@ proc installCommand*(
       styledEcho fgYellow, "   Info: ", fgWhite, "package ", fgYellow, dep.name, "-", dep.gitRef.name.split("/")[^1], fgWhite, " is installing ..."
     let
       depName = dep.name.normalizedName & "-" & dep.gitRef.name.split("/")[^1] & "-" & dep.gitRef.hash
-      archiveFilename = ".cache/nmr/graph/" & depName.normalizedName & ".zip"
-      depDirectory = "deps/" & depName.normalizedName
+      archiveFilename = ".cache/nmr/graph/" & depName & ".zip"
+      depDirectory =
+        if global:
+          getHomeDir() / ".nimble" / "pkgs2" / depName
+        else:
+          "deps" / depName
     if not dirExists(depDirectory):
       extractAll(archiveFilename, depDirectory)
   
-  var configFiles: seq[string] = @[]
-  for i in walkDirRec(getCurrentDir()):
-    if i.startsWith(getCurrentDir() / "deps"):
-      continue
-    var tmp: string
-    if i.scanf("$*config.nims", tmp):
-      configFiles.add i
-    # When is not supporting
-    # elif i.scanf("$*.nim.cfg", tmp):
-    #   configFiles.add i
-  
-  updateConfigPaths(configFiles, iDeps, getCurrentDir() / "deps")
+  if not global:
+    var configFiles: seq[string] = @[]
+    for i in walkDirRec(getCurrentDir()):
+      if i.startsWith(getCurrentDir() / "deps"):
+        continue
+      var tmp: string
+      if i.scanf("$*config.nims", tmp):
+        configFiles.add i
+      # When is not supporting
+      # elif i.scanf("$*.nim.cfg", tmp):
+      #   configFiles.add i
+    updateConfigPaths(configFiles, iDeps, getCurrentDir() / "deps")
+  else:
+    for dep in iDeps:
+      let
+        depName = dep.name.normalizedName & "-" & dep.gitRef.name.split("/")[^1] & "-" & dep.gitRef.hash
+        depDirectory = getHomeDir() / ".nimble" / "pkgs2" / depName
+        first = firstFolder(depDirectory)
+      moveFiles(first, depDirectory, true)
+      var meta = %*{
+        "version": 1,
+        "metaData": {
+          "url": dep.url,
+          "downloadMethod": "git",
+          "vcsRevision": dep.gitRef.hash[0..<40],
+          "files": [],
+          "binaries": [],
+          "specialVersions": [ dep.version ]
+        }
+      }
+      for i in walkDirRec(depDirectory):
+        var file = i
+        file.removePrefix(depDirectory)
+        meta["metaData"]["files"].add %file
+      var file = open(depDirectory / "nimblemeta.json", fmWrite)
+      file.write(meta.pretty)
+      file.close()
 
   styledEcho fgGreen, "Success: ", fgWhite, "package(s) was installed."

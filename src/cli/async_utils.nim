@@ -1,7 +1,8 @@
 import
   std/asyncdispatch,
   std/httpclient,
-  std/terminal
+  std/terminal,
+  std/os
 
 
 proc waitAndProgress*[T](action: string, fut: Future[T], color: ForegroundColor = fgCyan) {.async.} =

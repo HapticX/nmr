@@ -141,6 +141,36 @@ proc initCli*() =
   if not fileExists(packagesFile): fetchPackages()
 
 
+proc firstFolder*(src: string): string =
+  for kind, path in walkDir(src):
+    if kind == PathComponent.pcDir:
+      return path
+
+
+proc moveFiles*(src, dist: string, removeSrc: bool = false) =
+  let
+    srcFolder = src.lastPathPart
+    parent = src.parentDir
+
+  for i in walkDirRec(src):
+    let filename = i.lastPathPart
+    var filepath = i
+    filepath.removePrefix(src)
+    filepath.removePrefix(srcFolder)
+    filepath.removeSuffix(filename)
+    if not dirExists(dist / filepath):
+      createDir(dist / filepath)
+    var f = open(i, fmRead)
+    let data = f.readAll()
+    f.close()
+    f = open(dist / filepath / filename, fmWrite)
+    f.write(data)
+    f.close()
+
+  if removeSrc:
+    removeDir(src)
+
+
 proc findPackage*(name: string, packages: JsonNode): JsonNode =
   var pkg: JsonNode
   for package in packages:
@@ -199,10 +229,6 @@ when withDir(thisDir(), system.fileExists("nimble.paths")):
 """)
 
     writeFile(configPaths, depsData)
-
-
-proc lockDeps*(dep: Dependency, node: JsonNode) =
-  discard
 
 
 proc processDep*(dep: Dependency, packages: JsonNode, useCache: bool = true) {.async.} =

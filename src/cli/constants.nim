@@ -22,6 +22,9 @@ description = "{pkgDescription}"
 license = "{pkgLicense}"
 srcDir = "{srcDir}"
 
+# These are application packages which require building prior to installation.
+# bin = @["{pkgName}"]  # {srcDir}/{pkgName}.nim
+
 
 # Deps
 
