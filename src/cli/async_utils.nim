@@ -2,7 +2,9 @@ import
   std/asyncdispatch,
   std/httpclient,
   std/terminal,
-  std/os
+  std/os,
+
+  taskpools
 
 
 proc waitAndProgress*[T](action: string, fut: Future[T], color: ForegroundColor = fgCyan) {.async.} =
@@ -16,6 +18,22 @@ proc waitAndProgress*[T](action: string, fut: Future[T], color: ForegroundColor 
     else:
       inc i
     await sleepAsync(50)
+    stdout.flushFile()
+    stdout.cursorUp()
+  styledEcho fgCyan, "[", action, "]", fgGreen, " Completed"
+
+
+proc waitAndProgress*[T](action: string, flow: FlowVar[T], color: ForegroundColor = fgCyan) =
+  var
+    i = 0
+    progresses = @["/", "-", "\\", "|"]
+  while not flow.isReady:
+    styledEcho color, "[", action, "] ", fgWhite, progresses[i]
+    if i == progresses.len-1:
+      i = 0
+    else:
+      inc i
+    sleep(20)
     stdout.flushFile()
     stdout.cursorUp()
   styledEcho fgCyan, "[", action, "]", fgGreen, " Completed"

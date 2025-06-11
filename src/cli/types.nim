@@ -10,6 +10,7 @@ type
     children*: seq[Dependency]
     name*, version*: string
     srcDir*: string
+    bin*: seq[string]
     url*: string
     gitRef*: tuple[hash, name: string]
     tasks*: seq[tuple[command, name: string]]

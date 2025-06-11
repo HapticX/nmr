@@ -6,7 +6,8 @@ import
   ./deps_graph,
   ./clean_cache,
   ./init,
-  ./install
+  ./install,
+  ./remove
 
 
 export
@@ -17,4 +18,5 @@ export
   deps_graph,
   clean_cache,
   init,
-  install
+  install,
+  remove

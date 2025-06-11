@@ -6,6 +6,7 @@ import
   std/terminal,
   std/strutils,
   std/strscans,
+  std/strtabs,
   std/unicode,
   std/macros,
   std/tables,
@@ -201,6 +202,7 @@ proc updateConfigPaths*(
     let
       original = readFile(cfgPath)
       configPaths = cfgDir / "nimble.paths"
+      paths = readFile(configPaths)
     # process each dependency
     for dep in deps:
       # build dirName and fullPath
@@ -220,7 +222,8 @@ proc updateConfigPaths*(
       if dep.srcDir.len > 0:
         fullPath.add "/" & dep.srcDir
 
-      depsData &= "--path:\"" & fullPath & "\"\n"
+      if "--path:\"" & fullPath & "\"\n" notin paths:
+        depsData &= "--path:\"" & fullPath & "\"\n"
 
     if "include \"nimble.paths\"" notin original:
       writeFile(cfgPath, original & """
@@ -228,7 +231,46 @@ when withDir(thisDir(), system.fileExists("nimble.paths")):
   include "nimble.paths"
 """)
 
-    writeFile(configPaths, depsData)
+    writeFile(configPaths, paths & depsData)
+
+
+proc pathsMap*(deps: seq[Dependency] = @[]): StringTableRef =
+  result = newStringTable()
+  let
+    nimbleDir = getHomeDir() / ".nimble" / "pkgs2"
+    localDeps = "deps"
+  if dirExists(nimbleDir):
+    for i in nimbleDir.walkDirRec({ pcDir }, {}):
+      for file in i.walkDirRec():
+        if file.endsWith(".nimble"):
+          let nimbleFile = parseNimbleFile(file)
+          result[nimbleFile.name] = file.parentDir / nimbleFile.srcDir
+          break
+  if dirExists(localDeps):
+    for i in localDeps.walkDirRec({ pcDir }, {}):
+      for file in i.walkDirRec():
+        if file.endsWith(".nimble"):
+          let nimbleFile = parseNimbleFile(file)
+          result[nimbleFile.name] = file.parentDir / nimbleFile.srcDir
+          break
+  for dep in deps:
+    # build dirName and fullPath
+    let tagPart = dep.gitRef.name.split('/')[^1]
+    let dirName = fmt"{dep.name.normalizedName}-{tagPart}-{dep.gitRef.hash}"
+    var fullPath = fmt"deps/{dirName}"
+    # if there's exactly one subdir under depsRoot/dirName, use it
+    let dr = "deps" / dirName
+    var subDir = ""
+    var cnt = 0
+    for kind, p in walkDir(dr):
+      if kind == pcDir:
+        subDir = p.split(DirSep)[^1]
+        cnt.inc
+    if cnt == 1:
+      fullPath.add "/" & subDir
+    if dep.srcDir.len > 0:
+      fullPath.add "/" & dep.srcDir
+    result[dep.name] = fullPath
 
 
 proc processDep*(dep: Dependency, packages: JsonNode, useCache: bool = true) {.async.} =
@@ -296,6 +338,7 @@ proc processDep*(dep: Dependency, packages: JsonNode, useCache: bool = true) {.a
       
       dep.version = currentDep.version
       dep.srcDir = currentDep.srcDir
+      dep.bin = currentDep.bin
       
       var childFuts: seq[Future[void]] = @[]
       for nextDep in currentDep.children:

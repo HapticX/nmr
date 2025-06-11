@@ -3,12 +3,14 @@ import
   std/strformat,
   std/strscans,
   std/strutils,
+  std/strtabs,
   std/terminal,
   std/unicode,
   std/osproc,
   std/json,
   std/os,
   zippy/ziparchives,
+  regex,
   ../utils,
   ../constants
 
@@ -52,6 +54,8 @@ proc installCommand*(
   var
     deps: seq[Dependency]
     futures: seq[Future[void]]
+    iDeps: seq[Dependency] = @[]
+    binaries: seq[tuple[path: string, dep: Dependency]] = @[]
   if args.len > 0:
     var insertIndex = -1
     var nimbleData: seq[string] = @[]
@@ -120,7 +124,6 @@ proc installCommand*(
     futures.add downloadDeps(dep, global)
   waitFor waitAndProgress("Download packages", gather(futures))
 
-  var iDeps: seq[Dependency] = @[]
   for dep in deps:
     for i in dep.toInstallOrder:
       iDeps.add i
@@ -136,6 +139,9 @@ proc installCommand*(
           getHomeDir() / ".nimble" / "pkgs2" / depName
         else:
           "deps" / depName
+      first = firstFolder(depDirectory)
+    for binary in dep.bin:
+      binaries.add (path: first / dep.srcDir / binary, dep: dep)
     if not dirExists(depDirectory):
       extractAll(archiveFilename, depDirectory)
   
@@ -147,9 +153,6 @@ proc installCommand*(
       var tmp: string
       if i.scanf("$*config.nims", tmp):
         configFiles.add i
-      # When is not supporting
-      # elif i.scanf("$*.nim.cfg", tmp):
-      #   configFiles.add i
     updateConfigPaths(configFiles, iDeps, getCurrentDir() / "deps")
   else:
     for dep in iDeps:
@@ -176,5 +179,21 @@ proc installCommand*(
       var file = open(depDirectory / "nimblemeta.json", fmWrite)
       file.write(meta.pretty)
       file.close()
+  
+  if binaries.len > 0:
+    var map = pathsMap()
+    var paths: seq[string] = @[]
+    for name, path in map.pairs:
+      paths.add fmt"""--path:"{path}" """
+    for binary in binaries:
+      styledEcho "Installing ", fgYellow, binary.dep.name, " ", fgMagenta, "v", binary.dep.version, fgWhite, "..."
+      var command = fmt"""nim c {paths.join(" ")} "{binary.path}" """
+      let (output, exitCode) = execCmdEx(command, { poUsePath, poEvalCommand, poStdErrToStdOut })
+      if exitCode == 0:
+        let outputFile = output.findAll(re2"; out: ([^\[]+)\[")
+        let path = output[outputFile[0].group(0)].strip()
+        discard setupBinSymlink(path, getHomeDir() / ".nimble" / "bin" / binary.path.lastPathPart)
+      else:
+        echo output
 
   styledEcho fgGreen, "Success: ", fgWhite, "package(s) was installed."

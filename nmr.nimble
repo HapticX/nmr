@@ -20,3 +20,4 @@ requires "qrgen >= 3.1.0"
 
 requires "taskpools >= 0.1.0"
 requires "zippy"
+requires "regex"

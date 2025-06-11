@@ -8,6 +8,23 @@ import
   ./types
 
 
+when defined(windows):
+  # This is just for Win XP support.
+  # TODO: Drop XP support?
+  from winlean import WINBOOL, DWORD
+  type
+    OSVERSIONINFO* {.final, pure.} = object
+      dwOSVersionInfoSize*: DWORD
+      dwMajorVersion*: DWORD
+      dwMinorVersion*: DWORD
+      dwBuildNumber*: DWORD
+      dwPlatformId*: DWORD
+      szCSDVersion*: array[0..127, char]
+
+  proc GetVersionExA*(VersionInformation: var OSVERSIONINFO): WINBOOL{.stdcall,
+    dynlib: "kernel32", importc: "GetVersionExA".}
+
+
 proc parseNimble(node: PNode, dep: Dependency, featureList: seq[string] = @[])
 
 
@@ -135,6 +152,11 @@ proc parseNimble(node: PNode, dep: Dependency, featureList: seq[string] = @[]) =
         dep.version = node[1].strVal
       else:
         discard
+    elif node[0].kind == nkIdent and node[0].ident.s == "bin":
+      if node[1].kind == nkPrefix and node[1][0].ident.s == "@" and node[1][1].kind == nkBracket:
+        for i in node[1][1]:
+          if i.kind in nkStrKinds:
+            dep.bin.add i.strVal
   of nkWhenStmt:
     var wasParsed = false
     for branch in node:
@@ -171,3 +193,43 @@ proc parseNimbleFile*(filename: string, featureList: seq[string] = @[]): Depende
   if setupParser(parser, fileIdx, newIdentCache(), conf):
     let parsed = parseAll(parser)
     parseNimble(parsed, result, featureList)
+
+
+proc setupBinSymlink*(
+    symlinkDest, symlinkFilename: string
+): seq[string] =
+  result = @[]
+  let
+    symlinkDestRel = relativePath(symlinkDest, symlinkFilename.parentDir())
+    currentPerms = getFilePermissions(symlinkDest)
+  setFilePermissions(symlinkDest, currentPerms + {fpUserExec})
+  when defined(unix):
+    if fileExists(symlinkFilename) or symlinkExists(symlinkFilename):
+      let msg = "Symlink already exists in $1. Replacing." % symlinkFilename
+      removeFile(symlinkFilename)
+
+    createSymlink(symlinkDestRel, symlinkFilename)
+    result.add symlinkFilename.extractFilename
+  elif defined(windows):
+    # There is a bug on XP, described here:
+    # http://stackoverflow.com/questions/2182568/batch-script-is-not-executed-if-chcp-was-called
+    # But this workaround brakes code page on newer systems, so we need to detect OS version
+    var osver = OSVERSIONINFO()
+    osver.dwOSVersionInfoSize = cast[DWORD](sizeof(OSVERSIONINFO))
+    if GetVersionExA(osver) == WINBOOL(0):
+      styledEcho fgRed, "Error: ", fgWhite, "Can't detect OS version: GetVersionExA call failed"
+      quit QuitFailure
+    let fixChcp = osver.dwMajorVersion <= 5
+
+    # Create cmd.exe/powershell stub.
+    let dest = symlinkFilename.changeFileExt("cmd")
+    var contents = "@"
+    contents.add "\"" & symlinkDestRel & "\" %*\n"
+    writeFile(dest, contents)
+    result.add dest.extractFilename
+    # For bash on Windows (Cygwin/Git bash).
+    let bashDest = dest.changeFileExt("")
+    writeFile(bashDest, "\"`dirname \"$0\"`\\" & symlinkDestRel & "\" \"$@\"\n")
+    result.add bashDest.extractFilename
+  else:
+    {.error: "Sorry, your platform is not supported.".}

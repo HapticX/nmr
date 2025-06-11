@@ -47,6 +47,17 @@ proc installCommandAux*(hlp: bool = false, global: bool = false, verbose: bool =
   QuitSuccess
 
 
+proc removeCommandAux*(
+    hlp: bool = false,
+    global: bool = false,
+    verbose: bool = false,
+    recursive: bool = false,
+    args: seq[string]
+): int =
+  removeCommand(hlp, global, verbose, recursive, args)
+  QuitSuccess
+
+
 proc cleanCacheCommandAux*(hlp: bool = false, skipNimble: bool = false, skipArchive: bool = false): int =
   cleanCacheCommand(hlp, skipNimble, skipArchive)
   QuitSuccess
@@ -117,6 +128,7 @@ when isMainModule:
     [cleanCacheCommandAux, cmdName = "cleancache"],
     [initCommandAux, cmdName = "init"],
     [installCommandAux, cmdName = "install"],
+    [removeCommandAux, cmdName = "remove"],
   )
   initCli()
 
@@ -142,6 +154,26 @@ when isMainModule:
     let p = pars.find("-l")
     pars.delete(p)
     pars.insert("--limit", p)
+  if pars.find("-n") != -1:
+    let p = pars.find("-n")
+    pars.delete(p)
+    pars.insert("--name", p)
+  if pars.find("-d") != -1:
+    let p = pars.find("-d")
+    pars.delete(p)
+    pars.insert("--description", p)
+  if pars.find("-nv") != -1:
+    let p = pars.find("-nv")
+    pars.delete(p)
+    pars.insert("--min-nim-version", p)
+  if pars.find("-A") != -1:
+    let p = pars.find("-A")
+    pars.delete(p)
+    pars.insert("--author", p)
+  if pars.find("-Li") != -1:
+    let p = pars.find("-Li")
+    pars.delete(p)
+    pars.insert("--license", p)
   
   # Flags
   if pars.find("-G") != -1:
@@ -150,9 +182,6 @@ when isMainModule:
   if pars.find("-j") != -1:
     pars.delete(pars.find("-j"))
     pars.add("--json")
-  if pars.find("-n") != -1:
-    pars.delete(pars.find("-n"))
-    pars.add("--name")
   if pars.find("-G") != -1:
     pars.delete(pars.find("-G"))
     pars.add("--global")
@@ -162,18 +191,6 @@ when isMainModule:
   if pars.find("-V") != -1:
     pars.delete(pars.find("-V"))
     pars.add("--verbose")
-  if pars.find("-d") != -1:
-    pars.delete(pars.find("-d"))
-    pars.add("--description")
-  if pars.find("-nv") != -1:
-    pars.delete(pars.find("-nv"))
-    pars.add("--min-nim-version")
-  if pars.find("-A") != -1:
-    pars.delete(pars.find("-A"))
-    pars.add("--author")
-  if pars.find("-Li") != -1:
-    pars.delete(pars.find("-Li"))
-    pars.add("--license")
   if pars.find("-sn") != -1:
     pars.delete(pars.find("-sn"))
     pars.add("--skip-nimble")
@@ -183,6 +200,9 @@ when isMainModule:
   if pars.find("-nc") != -1:
     pars.delete(pars.find("-nc"))
     pars.add("--no-cache")
+  if pars.find("-R") != -1:
+    pars.delete(pars.find("-R"))
+    pars.add("--recursive")
   
   # Helo override
   if pars.find("-h") != -1:
@@ -209,6 +229,8 @@ when isMainModule:
     quit(dispatchinit(cmdLine = pars[1..^1]))
   of "install", "i":
     quit(dispatchinstall(cmdLine = pars[1..^1]))
+  of "remove", "r", "uninstall":
+    quit(dispatchremove(cmdLine = pars[1..^1]))
   else:
     if pars.find("--hlp") != -1:
       quit(dispatchhelp(cmdLine = pars[1..^1]))
