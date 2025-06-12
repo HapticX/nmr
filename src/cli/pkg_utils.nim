@@ -196,7 +196,8 @@ proc parseNimbleFile*(filename: string, featureList: seq[string] = @[]): Depende
 
 
 proc setupBinSymlink*(
-    symlinkDest, symlinkFilename: string
+    symlinkDest, symlinkFilename: string,
+    global: bool = false
 ): seq[string] =
   result = @[]
   let
@@ -224,7 +225,10 @@ proc setupBinSymlink*(
     # Create cmd.exe/powershell stub.
     let dest = symlinkFilename.changeFileExt("cmd")
     var contents = "@"
-    contents.add "\"" & symlinkDestRel & "\" %*\n"
+    if global:
+      contents.add "\"%~dp0\\" & symlinkDestRel & "\" %*\n"
+    else:
+      contents.add "\"" & symlinkDestRel & "\" %*\n"
     writeFile(dest, contents)
     result.add dest.extractFilename
     # For bash on Windows (Cygwin/Git bash).

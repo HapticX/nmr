@@ -62,6 +62,7 @@ proc normalizedName*(name: string): string =
     .replace(">", "-")
     .replace("|", "-")
     .replace("'", "-")
+  result = result.strip(chars = {'-', ' '})
 
 
 proc printTerminalBeaty*(
@@ -307,7 +308,7 @@ proc processDep*(dep: Dependency, packages: JsonNode, useCache: bool = true) {.a
         filename = ".cache/nmr/graph/" & dep.name.normalizedName & "-" & gitRef.name.split("/")[^1] & "-" & gitRef.hash & ".nimble"
       if not useCache or not fileExists(filename):
         var data = await client.get(url)
-        if data.code == Http200:
+        if data.code == Http200 and dep.gitRef.hash.len > 0:
           var f = openAsync(filename, fmWrite)
           await f.write(await data.body)
           f.close()
@@ -322,6 +323,11 @@ proc processDep*(dep: Dependency, packages: JsonNode, useCache: bool = true) {.a
             var archiveFile = ""
             for file in reader.walkFiles:
               if file.endsWith(".nimble"):
+                var parent = file.parentDir()
+                parent.removeSuffix("/")
+                let parts = parent.split("-")
+                if parts.len > 1 and parts[1].len >= 40 and dep.gitRef.hash.len == 0:
+                  dep.gitRef.hash = parts[1]
                 archiveFile = file
                 break
             if archiveFile.len > 0:

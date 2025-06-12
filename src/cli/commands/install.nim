@@ -129,6 +129,23 @@ proc installCommand*(
       iDeps.add i
 
   for dep in iDeps:
+    # dependency already cached
+    # so we find its hash in deps folder
+    if dep.gitRef.hash.len == 0:
+      let depsDirectory = 
+        if global:
+          # global deps
+          getHomeDir() / ".nimble" / "pkgs2"
+        else:
+          # local deps
+          "deps"
+      # iterate over all deps folders
+      # and find that starts with {depName}-{refName}-
+      for directory in walkDirRec(depsDirectory, { pcDir }, {}):
+        if directory.lastPathPart.startsWith(dep.name.normalizedName & "-" & dep.gitRef.name.split("/")[^1] & "-"):
+          let parts = directory.lastPathPart.split("-")
+          dep.gitRef.hash = parts[^1]
+          break
     if verbose:
       styledEcho fgYellow, "   Info: ", fgWhite, "package ", fgYellow, dep.name, "-", dep.gitRef.name.split("/")[^1], fgWhite, " is installing ..."
     let
@@ -141,9 +158,13 @@ proc installCommand*(
           "deps" / depName
       first = firstFolder(depDirectory)
     for binary in dep.bin:
-      binaries.add (path: first / dep.srcDir / binary, dep: dep)
-    if not dirExists(depDirectory):
-      extractAll(archiveFilename, depDirectory)
+      if global:
+        binaries.add (path: depDirectory / dep.srcDir / binary, dep: dep)
+      else:
+        binaries.add (path: first / dep.srcDir / binary, dep: dep)
+    if dirExists(depDirectory):
+      removeDir(depDirectory)
+    extractAll(archiveFilename, depDirectory)
   
   if not global:
     var configFiles: seq[string] = @[]
@@ -166,7 +187,13 @@ proc installCommand*(
         "metaData": {
           "url": dep.url,
           "downloadMethod": "git",
-          "vcsRevision": dep.gitRef.hash[0..<40],
+          "vcsRevision":
+            if dep.gitRef.hash.len > 0:
+              dep.gitRef.hash[0..<40]
+            elif dep.gitRef.name.len > 40:
+              dep.gitRef.name[0..<40]
+            else:
+              dep.gitRef.name,
           "files": [],
           "binaries": [],
           "specialVersions": [ dep.version ]
@@ -192,7 +219,9 @@ proc installCommand*(
       if exitCode == 0:
         let outputFile = output.findAll(re2"; out: ([^\[]+)\[")
         let path = output[outputFile[0].group(0)].strip()
-        discard setupBinSymlink(path, getHomeDir() / ".nimble" / "bin" / binary.path.lastPathPart)
+        discard setupBinSymlink(
+          path, getHomeDir() / ".nimble" / "bin" / binary.path.lastPathPart, global
+        )
       else:
         echo output
 

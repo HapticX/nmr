@@ -182,9 +182,6 @@ when isMainModule:
   if pars.find("-j") != -1:
     pars.delete(pars.find("-j"))
     pars.add("--json")
-  if pars.find("-G") != -1:
-    pars.delete(pars.find("-G"))
-    pars.add("--global")
   if pars.find("-v") != -1:
     pars.delete(pars.find("-v"))
     pars.add("--version")
